@@ -223,8 +223,8 @@ const snippetMeta = `
 package main
 
 import (
-	"reflect"
-	"github.com/golang/protobuf/proto"
+    "reflect"
+    "github.com/golang/protobuf/proto"
 )
 
 const _lesDump = "{{ .LesDump }}"
@@ -235,7 +235,7 @@ func getVarByTypeName(typeName string) proto.Message {
     case "{{- $element -}}":
         return reflect.New(reflect.TypeOf(& {{- $element -}} {}).Elem()).Interface().(proto.Message)
     {{ end }}
-	}
+    }
     return nil
 }`
 
