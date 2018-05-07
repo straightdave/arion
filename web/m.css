@@ -10,6 +10,7 @@ body {
 
 a {
     text-decoration: none;
+    user-select: none;
 }
 
 ul {
@@ -18,6 +19,28 @@ ul {
 
 li {
     text-decoration: none;
+}
+
+h3.eletitle {
+    font-size: 20px;
+}
+span.eleName {
+    font-size: 17px;
+    color: #375EAB;
+}
+span.eleType {
+    font-size: 17px;
+    font-weight: bold;
+    color: #375EAB;
+}
+
+button.end-button {
+    padding: 10px;
+    background-color: #375EAB;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    border-radius: 5px;
 }
 
 div.clear {
@@ -36,7 +59,7 @@ div.topbar-title {
     font-size: 20px;
     position: absolute;
     top: 17px;
-    left: 15px;
+    left: 20px;
 }
 
 div.topbar-buttons {
@@ -76,10 +99,41 @@ li.end {
     display: block;
     margin: 10px 20px;
     font-size: 20px;
+}
 
+li.end > div.end-title {
     background-color: #E0EBF5;
     color: #375EAB;
     padding: 8px;
-
     cursor: pointer;
+    user-select: none;
+}
+
+li.end > div.end-panel {
+    border: 2px solid #E0EBF5;
+}
+
+div.end-desc {
+    padding: 10px;
+    border-bottom: 2px solid #E0EBF5;
+}
+
+div.end-input {
+    padding: 10px;
+}
+div.end-input > textarea {
+    border: 2px solid #E0EBF5;
+    width: 90%;
+    height: 300px;
+    overflow-x: scroll;
+    overflow-y: scroll;
+    font-size: 18px;
+    padding: 5px;
+}
+div.end-output {
+    padding-left: 15px;
+}
+div.end-buttons {
+    padding: 0px 10px 10px 10px;
+    border-bottom: 2px solid #E0EBF5;
 }
