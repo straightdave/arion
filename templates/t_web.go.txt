@@ -1,0 +1,8 @@
+// MasterClient
+// auto-generated source code: web page
+// by arion (https://github.com/straightdave/arion)
+package main
+
+const html = "{{- .HtmlSource -}}"
+const css = "{{-  .CssSource -}}"
+const js = "{{- .JsSource -}}"

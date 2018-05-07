@@ -1,0 +1,241 @@
+// MasterClient
+// auto-generated source code: main.go
+// by arion (https://github.com/straightdave/arion)
+package main
+
+import (
+    "flag"
+    "fmt"
+    "io"
+    "io/ioutil"
+    "net/http"
+    "os"
+    "os/signal"
+    "regexp"
+    "strings"
+
+    "github.com/golang/protobuf/jsonpb"
+    "golang.org/x/net/context"
+    "google.golang.org/grpc"
+
+    "github.com/straightdave/lesphina"
+)
+
+var (
+    _list       = flag.Bool("list", false, "list all endpoints")
+    _serve      = flag.String("serve", "", "if specified, serve stub as http service")
+    _host       = flag.String("host", ":8087", "host of target service")
+    _call       = flag.String("call", "", "method name to call")
+    _rawRequest = flag.String("req", "", "raw request json")
+
+    _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
+)
+
+var (
+    _les  *lesphina.Lesphina
+    _conn *grpc.ClientConn
+)
+
+const (
+    MimeHtml = "text/html"
+    MimeCss  = "text/css"
+    MimeJs   = "text/javascript"
+    MimeJson = "application/json"
+)
+
+//temp for dev
+// var html, css, js string
+
+func init() {
+
+    // // temp for dev
+    // rhtml, _ := ioutil.ReadFile("m.source.html")
+    // rcss, _ := ioutil.ReadFile("m.source.css")
+    // rjs, _ := ioutil.ReadFile("m.source.js")
+    // html = string(rhtml)
+    // css = string(rcss)
+    // js = string(rjs)
+
+    flag.Parse()
+
+    _les = lesphina.Restore(_lesDump)
+
+    var err error
+    if _conn, err = grpc.Dial(*_host, grpc.WithInsecure()); err != nil {
+        fmt.Printf("[init] failed to dial: %v\n", err)
+        os.Exit(1)
+    }
+}
+
+func main() {
+    if len(os.Args) == 1 {
+        flag.PrintDefaults()
+        return
+    }
+
+    if *_serve != "" {
+        serveStaticContent("/", MimeHtml, html)
+        serveStaticContent("/m.css", MimeCss, css)
+        serveStaticContent("/m.js", MimeJs, js)
+
+        http.HandleFunc("/type", handleGetType)
+        http.HandleFunc("/meta", handleGetMeta)
+        http.HandleFunc("/call", handleCallEndpoint)
+
+        srv := &http.Server{Addr: *_serve}
+
+        idleConnsClosed := make(chan struct{})
+        go func() {
+            sigint := make(chan os.Signal, 1)
+            signal.Notify(sigint, os.Interrupt)
+            <-sigint
+
+            fmt.Println("gracefully shutdown...")
+            if err := srv.Shutdown(context.Background()); err != nil {
+                fmt.Printf("HTTP server Shutdown: %v", err)
+            }
+            close(idleConnsClosed)
+        }()
+
+        if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+            fmt.Printf("HTTP server ListenAndServe: %v", err)
+            return
+        }
+
+        <-idleConnsClosed
+        return
+    }
+
+    if *_list {
+        q := _les.Query().ByKind(lesphina.KindInterface).ByName("Client").All()
+        for _, intr := range q {
+            svc, ok := intr.(*lesphina.Interface)
+            if !ok {
+                fmt.Println("the obj found is not interface, weird")
+                continue
+            }
+
+            fmt.Println(svc.GetName())
+            for _, m := range svc.Methods {
+                fmt.Printf("> %s\n", m.GetName())
+            }
+            fmt.Println()
+        }
+        return
+    }
+
+    if *_call != "" {
+        fmt.Println(callEndpoint(*_call, *_rawRequest))
+        return
+    }
+}
+
+func serveStaticContent(path, mime, content string) {
+    http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+        defer func() {
+            if r := recover(); r != nil {
+                io.WriteString(w, r.(error).Error())
+            }
+        }()
+
+        w.Header().Add("Content-Type", mime)
+        io.WriteString(w, content)
+    })
+}
+
+func handleGetType(w http.ResponseWriter, r *http.Request) {
+    defer func() {
+        if r := recover(); r != nil {
+            io.WriteString(w, r.(error).Error())
+        }
+    }()
+
+    typeName := strings.TrimSpace(r.URL.Query().Get("n"))
+    if typeName == "" {
+        http.Error(w, "lacking of query keyword (n)", http.StatusBadRequest)
+        return
+    }
+
+    t := _les.Query().ByName(typeName).First()
+    switch t.GetKind() {
+    case lesphina.KindFunction:
+        tt := t.(*lesphina.Function)
+        io.WriteString(w, tt.Json())
+    case lesphina.KindStruct:
+        tt := t.(*lesphina.Struct)
+        io.WriteString(w, tt.Json())
+    case lesphina.KindElement:
+        tt := t.(*lesphina.Element)
+        io.WriteString(w, tt.Json())
+    default:
+        io.WriteString(w, `{"err":"unknown or unsupport type"}`)
+    }
+}
+
+func handleGetMeta(w http.ResponseWriter, r *http.Request) {
+    io.WriteString(w, _les.Meta.Json())
+}
+
+func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
+    defer func() {
+        if r := recover(); r != nil {
+            io.WriteString(w, r.(error).Error())
+        }
+    }()
+
+    if r.Method != "POST" {
+        http.Error(w, "only support POST", http.StatusBadRequest)
+        return
+    }
+
+    endpointName := strings.TrimSpace(r.URL.Query().Get("e"))
+    if endpointName == "" {
+        http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
+        return
+    }
+
+    body, err := ioutil.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "can't read body", http.StatusBadRequest)
+        return
+    }
+
+    io.WriteString(w, callEndpoint(endpointName, string(body)))
+}
+
+func callEndpoint(endpointName, rawRequest string) string {
+    ctx := context.Background()
+    var opts []grpc.CallOption
+
+    method := getMethodPath(endpointName)
+    req := getVarByTypeName(endpointName + "Request")
+    if req == nil {
+        return "no such type: " + endpointName + "Request"
+    }
+
+    reply := getVarByTypeName(endpointName + "Response")
+    if reply == nil {
+        return "no such type: " + endpointName + "Response"
+    }
+
+    if err := jsonpb.UnmarshalString(rawRequest, req); err != nil {
+        return "cannot unmarshal raw request: " + err.Error()
+    }
+
+    if err := _conn.Invoke(ctx, method, req, reply, opts...); err != nil {
+        return "invoking failed: " + err.Error()
+    }
+
+    return reply.String()
+}
+
+func getMethodPath(endpointName string) string {
+    q := _les.Query()
+    t := q.ByKind(lesphina.KindFunction).ByName(endpointName).First().(*lesphina.Function)
+    rawBody := t.RawBody
+    m := _regexMethodPath.FindAllStringSubmatch(rawBody, 1)
+    if len(m) > 0 && len(m[0]) > 1 {
+        return m[0][1]
+    }
+    return "parse_method_path_error"
+}

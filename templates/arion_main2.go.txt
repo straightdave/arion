@@ -1,0 +1,7 @@
+// auto-generated source code for arion itself
+// by arion/_build tool
+package main
+
+const _compressedMeta = "{{- .CompressedMeta -}}"
+const _compressedMain = "{{- .CompressedMain -}}"
+const _compressedStatic = "{{- .CompressedStatic -}}"
