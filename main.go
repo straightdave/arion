@@ -130,7 +130,7 @@ func genMetaFile(pbFile, dirName, fileName string) error {
 		lesTypeList = append(lesTypeList, s.GetName())
 	}
 
-	tpl, err := template.New("meta").Parse(_compressedMeta)
+	tpl, err := template.New("meta").Parse(gozip.DecompressString(_compressedMeta))
 	if err != nil {
 		return err
 	}

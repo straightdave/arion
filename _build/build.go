@@ -59,9 +59,9 @@ func build(targetDir string) {
 	generateMain2ForArion(targetDir, struct {
 		CompressedMeta, CompressedMain, CompressedStatic string
 	}{
-		CompressedMeta:   compressFileContent(filepath.Join(targetDir, "/templates/t_meta.go.txt")),
-		CompressedMain:   compressFileContent(filepath.Join(targetDir, "/templates/t_main.go.txt")),
-		CompressedStatic: getCompressedStatic(filepath.Join(targetDir, "/templates/t_web.go.txt")),
+		CompressedMeta:   compressFileContent(filepath.Join(targetDir, "/snippets/t_meta.go.txt")),
+		CompressedMain:   compressFileContent(filepath.Join(targetDir, "/snippets/t_main.go.txt")),
+		CompressedStatic: getCompressedStatic(filepath.Join(targetDir, "/snippets/t_web.go.txt")),
 	})
 
 	// build
@@ -91,7 +91,7 @@ func generateMain2ForArion(dir string, data interface{}) {
 	}
 
 	// gen content
-	tplName := filepath.Join(dir, "/templates/arion_main2.go.txt")
+	tplName := filepath.Join(dir, "/snippets/arion_main2.go.txt")
 	fmt.Println("= generating main2.go from template:", tplName)
 	t, err := template.ParseFiles(tplName)
 	if err != nil {
