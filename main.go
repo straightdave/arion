@@ -166,11 +166,7 @@ func newSourceFile(content, dirName, fileName string) error {
 }
 
 func restoreFile(raw, dirName, fileName string) error {
-	c, err := gozip.DecompressString(raw)
-	if err != nil {
-		return err
-	}
-	return newSourceFile(c, dirName, fileName)
+	return newSourceFile(gozip.DecompressString(raw), dirName, fileName)
 }
 
 func compileDir(dirName, binFileName string) error {

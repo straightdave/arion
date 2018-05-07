@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,31 +20,31 @@ import (
 )
 
 var (
-	dev  = flag.Bool("dev", false, "to serve static pages")
-	port = flag.String("port", "8168", "local port to serve")
-	root = flag.String("root", "../web/", "root dir")
+	dev       = flag.Bool("dev", false, "to serve static pages")
+	port      = flag.String("port", "9999", "local port to serve")
+	targetDir = flag.String("target", ".", "target dir")
 )
 
 func main() {
 	flag.Parse()
 
-	if *dev {
-		if *root == "" {
-			fmt.Println("lack of '-r' value (root dir)")
-			return
-		}
-
-		serveStaticPage()
+	if *targetDir == "" {
+		fmt.Println("lack of target dir (-target)")
 		return
 	}
 
-	build("../")
+	if *dev {
+		rootDir := filepath.Join(*targetDir, "web")
+		serveStaticPage(rootDir)
+		return
+	}
+
+	build(*targetDir)
 }
 
-func serveStaticPage() {
-	fs := http.FileServer(http.Dir(*root))
+func serveStaticPage(rootDir string) {
+	fs := http.FileServer(http.Dir(rootDir))
 	http.Handle("/", fs)
-
 	p := ":" + strings.TrimLeft(*port, ":")
 	fmt.Println("serving dev at localhost on", p)
 	http.ListenAndServe(p, nil)
@@ -58,24 +59,41 @@ func build(targetDir string) {
 	generateMain2ForArion(targetDir, struct {
 		CompressedMeta, CompressedMain, CompressedStatic string
 	}{
-		CompressedMeta:   compressFileContent("../templates/t_meta.go.txt"),
-		CompressedMain:   compressFileContent("../templates/t_main.go.txt"),
-		CompressedStatic: getCompressedStatic("../templates/t_web.go.txt"),
+		CompressedMeta:   compressFileContent(filepath.Join(targetDir, "/templates/t_meta.go.txt")),
+		CompressedMain:   compressFileContent(filepath.Join(targetDir, "/templates/t_main.go.txt")),
+		CompressedStatic: getCompressedStatic(filepath.Join(targetDir, "/templates/t_web.go.txt")),
 	})
 
-	if err := exec.Command("go", "build", targetDir); err != nil {
+	// build
+	fmt.Println("begin building ...")
+	output, err := exec.Command("go", "build").CombinedOutput()
+	if err != nil {
 		panic(err)
 	}
+	fmt.Println(string(output))
+	fmt.Println("SUCCESS: Arion is built.")
 }
 
 func generateMain2ForArion(dir string, data interface{}) {
-	// remove existing main2 under dir
-	if err := exec.Command("rm", filepath.Join(dir, "main2*")); err != nil {
+	fmt.Println("generating main2 ...")
+
+	// remove existing main2~ under dir
+	fmt.Println("= removing all main2* under", dir)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
 		panic(err)
+	}
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), "main2") {
+			fmt.Println("removing", file.Name())
+			os.Remove(file.Name())
+		}
 	}
 
 	// gen content
-	t, err := template.New("main2").ParseFiles("../templates/arion_main2.go.txt")
+	tplName := filepath.Join(dir, "/templates/arion_main2.go.txt")
+	fmt.Println("= generating main2.go from template:", tplName)
+	t, err := template.ParseFiles(tplName)
 	if err != nil {
 		panic(err)
 	}
@@ -85,23 +103,26 @@ func generateMain2ForArion(dir string, data interface{}) {
 		panic(err)
 	}
 
-	// write to file
-	filename := fmt.Sprint("main2.%s.go", time.Now().UTC()) // be careful: not very random
+	// write to new main2
+	filename := fmt.Sprintf("main2.%d.go", time.Now().UTC().Unix()) // be careful: not very random
 	fullname := filepath.Join(dir, filename)
 	if err := ioutil.WriteFile(fullname, buf.Bytes(), 0666); err != nil {
 		panic(err)
 	}
+
+	fmt.Println("= main2 generated")
 }
 
 func getCompressedStatic(filename string) string {
-	htmlContent := compressFileContent(filepath.Join(*root, "index.html"))
-	cssContent := compressFileContent(filepath.Join(*root, "m.css"))
-	jsContent := compressFileContent(filepath.Join(*root, "m.js"))
-
-	t, err := template.New("static").ParseFiles(filename)
+	fmt.Println("generate and compress static file:", filename)
+	t, err := template.ParseFiles(filename)
 	if err != nil {
 		panic(err)
 	}
+
+	htmlContent := compressFileContent(filepath.Join(*targetDir, "/web/index.html"))
+	cssContent := compressFileContent(filepath.Join(*targetDir, "/web/m.css"))
+	jsContent := compressFileContent(filepath.Join(*targetDir, "/web/m.js"))
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, struct {
