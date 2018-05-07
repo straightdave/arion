@@ -1,3 +1,85 @@
-h1 {
-    color: blue;
+body, p, div, h1, h2, h3, h4, h5, h6, ul {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.5;
+}
+
+a {
+    text-decoration: none;
+}
+
+ul {
+    list-style: none;
+}
+
+li {
+    text-decoration: none;
+}
+
+div.clear {
+    clear: both;
+}
+
+div.topbar {
+    background-color: #E0EBF5;
+    height: 67px;
+    width: 100%;
+    position: relative;
+}
+
+div.topbar-title {
+    color: #222;
+    font-size: 20px;
+    position: absolute;
+    top: 17px;
+    left: 15px;
+}
+
+div.topbar-buttons {
+    position: absolute;
+    right: 10px;
+    text-align: left;
+}
+
+div.topbar-buttons > a.button {
+    display: block;
+    margin: 10px 5px;
+    padding: 10px;
+    float: left;
+    background-color: #375EAB;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    border: 1px solid #375EAB;
+    border-radius: 5px;
+}
+
+div.panel {
+    margin-bottom: 50px;
+}
+
+h1.svctitle {
+    display: block;
+
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1;
+    color: #375EAB;
+    margin: 20px 20px;
+}
+
+li.end {
+    display: block;
+    margin: 10px 20px;
+    font-size: 20px;
+
+    background-color: #E0EBF5;
+    color: #375EAB;
+    padding: 8px;
+
+    cursor: pointer;
 }

@@ -18,6 +18,7 @@ import (
     "golang.org/x/net/context"
     "google.golang.org/grpc"
 
+    gozip "github.com/straightdave/gozip/lib"
     "github.com/straightdave/lesphina"
 )
 
@@ -43,19 +44,7 @@ const (
     MimeJson = "application/json"
 )
 
-//temp for dev
-// var html, css, js string
-
 func init() {
-
-    // // temp for dev
-    // rhtml, _ := ioutil.ReadFile("m.source.html")
-    // rcss, _ := ioutil.ReadFile("m.source.css")
-    // rjs, _ := ioutil.ReadFile("m.source.js")
-    // html = string(rhtml)
-    // css = string(rcss)
-    // js = string(rjs)
-
     flag.Parse()
 
     _les = lesphina.Restore(_lesDump)
@@ -74,9 +63,9 @@ func main() {
     }
 
     if *_serve != "" {
-        serveStaticContent("/", MimeHtml, html)
-        serveStaticContent("/m.css", MimeCss, css)
-        serveStaticContent("/m.js", MimeJs, js)
+        serveStaticContent("/", MimeHtml, gozip.DecompressString(html))
+        serveStaticContent("/m.css", MimeCss, gozip.DecompressString(css))
+        serveStaticContent("/m.js", MimeJs, gozip.DecompressString(js))
 
         http.HandleFunc("/type", handleGetType)
         http.HandleFunc("/meta", handleGetMeta)

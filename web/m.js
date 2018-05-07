@@ -4,15 +4,39 @@
         num: 2,
         svc: [
             {
-                name: "svc1",
-                endpoints: []
-            }
+                name: "svc-1",
+                endpoints:
+                [
+                    {
+                        name: "endpoint-1",
+                    },
+                ]
+            },
+            {
+                name: "svc-2",
+                endpoints:
+                [
+                    {
+                        name: "endpoint-1"
+                    },
+                    {
+                        name: "endpoint-2"
+                    },
+                    {
+                        name: "endpoint-3"
+                    },
+                    {
+                        name: "endpoint-4"
+                    },
+                ]
+            },
         ]
     }
 
     // to gen innerHTML
     var gen = function(data) {
         var str = ''
+
 
 
 
