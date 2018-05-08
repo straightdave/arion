@@ -110,30 +110,74 @@ li.end > div.end-title {
 }
 
 li.end > div.end-panel {
-    border: 2px solid #E0EBF5;
+
 }
 
 div.end-desc {
     padding: 10px;
-    border-bottom: 2px solid #E0EBF5;
+    border: 2px solid #E0EBF5;
 }
 
 div.end-input {
+    margin-top: 10px;
     padding: 10px;
+    border: 1px solid #375EAB;
+    background: #FFFFD8;
+    border-top-right-radius: 5px;
+    border-top-left-radius: 5px;
+    overflow: hidden;
 }
 div.end-input > textarea {
-    border: 2px solid #E0EBF5;
-    width: 90%;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+    font-family: Menlo, monospace;
+
+    -webkit-appearance: textarea;
+    -webkit-rtl-ordering: logical;
+    flex-direction: column;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+
+    display: inline-block;
+    text-align: start;
+
+    background-color: #FFFFD8;
+    width: 100%;
     height: 300px;
-    overflow-x: scroll;
-    overflow-y: scroll;
-    font-size: 18px;
-    padding: 5px;
 }
 div.end-output {
-    padding-left: 15px;
+    border: 1px solid #375EAB;
+    background: #FFFFD8;
+    border-top: none !important;
+    padding: 10px;
+    max-height: 200px;
+    overflow: auto;
+    border-bottom-right-radius: 5px;
+    border-bottom-left-radius: 5px;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
 }
 div.end-buttons {
-    padding: 0px 10px 10px 10px;
-    border-bottom: 2px solid #E0EBF5;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    float: right;
+    padding: 20px 0 10px 0;
+    text-align: right;
+}
+div.end-buttons > a.button {
+    color: #222;
+    border: 1px solid #375EAB;
+    background: #E0EBF5;
+    height: 16px;
+    margin-left: 5px;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 5px;
+    text-align: right;
 }
