@@ -10,6 +10,9 @@ arion
 ```bash
 > arion -src <your.any.pb.go>
 ```
+>In this process, after all temporary source code are generated,
+Arion will try to call local `go` to compile.
+
 
 go to temporary dir and use the binary `xclient`:
 ```bash
