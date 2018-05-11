@@ -192,45 +192,15 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
     io.WriteString(w, callEndpoint(endpointName, string(body)))
 }
 
-func callEndpoint(endpointName, rawRequest string) string {
-    ctx := context.Background()
-    var opts []grpc.CallOption
-
-    method, err := getMethodPath(endpointName)
-    if err != nil {
-        return "get method path failed: " + err.Error()
-    }
-
-    req := getVarByTypeName(endpointName + "Request")
-    if req == nil {
-        return "no such type: " + endpointName + "Request"
-    }
-
-    reply := getVarByTypeName(endpointName + "Response")
-    if reply == nil {
-        return "no such type: " + endpointName + "Response"
-    }
-
-    if err := jsonpb.UnmarshalString(rawRequest, req); err != nil {
-        return "cannot unmarshal raw request: " + err.Error()
-    }
-
-    if err := _conn.Invoke(ctx, method, req, reply, opts...); err != nil {
-        return "invoking failed: " + err.Error()
-    }
-
-    return reply.String()
-}
-
-func getMethodPath(endpointName string) (res string, err error) {
+func callEndpoint(endpointName, rawRequest string) (res string) {
     defer func() {
         if r := recover(); r != nil {
-            res, err = "", fmt.Errorf("Panic in getMethodPath:%v", r.(error))
+            res = fmt.Sprintf("Panic in CallEndpoint: %v", r.(error))
         }
     }()
 
     var svcName, endName string
-    i := strings.LastIndex(endpointName, "/")
+    i := strings.LastIndex(endpointName, "#")
     if i > 0 {
         svcName = endpointName[:i]
         endName = endpointName[i+1:]
@@ -238,6 +208,34 @@ func getMethodPath(endpointName string) (res string, err error) {
         endName = endpointName
     }
 
+    method, err := getMethodPath(svcName, endName)
+    if err != nil {
+        return "Parsing method path failed: " + err.Error()
+    }
+
+    req := getVarByTypeName(endName + "Request")
+    if req == nil {
+        return "No such type: " + endName + "Request"
+    }
+
+    reply := getVarByTypeName(endName + "Response")
+    if reply == nil {
+        return "No such type: " + endName + "Response"
+    }
+
+    if err := jsonpb.UnmarshalString(rawRequest, req); err != nil {
+        return "Cannot unmarshal raw request value: " + err.Error()
+    }
+
+    ctx := context.Background()
+    var opts []grpc.CallOption
+    if err := _conn.Invoke(ctx, method, req, reply, opts...); err != nil {
+        return "Invoking failed: " + err.Error()
+    }
+    return reply.String()
+}
+
+func getMethodPath(svcName, endName string) (res string, err error) {
     qCandidates := _les.Query().ByKind(lesphina.KindFunction).ByName(endName).All()
     if len(qCandidates) < 1 {
         return "", fmt.Errorf("No function found by name: %s", endName)
@@ -257,7 +255,7 @@ func getMethodPath(endpointName string) (res string, err error) {
 
             if svcName != "" {
                 // if svcName is given, return the first candidate under this svc
-                if f.Recv[0].GetName() == svcName {
+                if strings.ToLower(f.Recv[0].BaseType) == strings.ToLower(svcName) {
                     target = f
                     break
                 }
