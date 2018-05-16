@@ -8,9 +8,9 @@ import (
     "fmt"
     "io"
     "io/ioutil"
+    "log"
     "net/http"
     "os"
-    "os/signal"
     "regexp"
     "strings"
 
@@ -51,8 +51,7 @@ func init() {
 
     var err error
     if _conn, err = grpc.Dial(*_host, grpc.WithInsecure()); err != nil {
-        fmt.Printf("[init] failed to dial: %v\n", err)
-        os.Exit(1)
+        log.Fatalf("[init] failed to dial: %v\n", err)
     }
 }
 
@@ -72,27 +71,7 @@ func main() {
         http.HandleFunc("/call", handleCallEndpoint)
 
         srv := &http.Server{Addr: *_serve}
-
-        idleConnsClosed := make(chan struct{})
-        go func() {
-            sigint := make(chan os.Signal, 1)
-            signal.Notify(sigint, os.Interrupt)
-            <-sigint
-
-            fmt.Println("gracefully shutdown...")
-            if err := srv.Shutdown(context.Background()); err != nil {
-                fmt.Printf("HTTP server Shutdown: %v", err)
-            }
-            close(idleConnsClosed)
-        }()
-
-        if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-            fmt.Printf("HTTP server ListenAndServe: %v", err)
-            return
-        }
-
-        <-idleConnsClosed
-        return
+        log.Fatal(srv.ListenAndServe())
     }
 
     if *_list {
