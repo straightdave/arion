@@ -4,5 +4,7 @@
 package main
 
 const html = "{{- .HtmlSource -}}"
-const css = "{{-  .CssSource -}}"
-const js = "{{- .JsSource -}}"
+const css  = "{{- .CssSource -}}"
+const js   = "{{- .JsSource -}}"
+
+const html2 = "{{- .HtmlTemplate -}}"

@@ -4,6 +4,7 @@
 package main
 
 import (
+    "bytes"
     "flag"
     "fmt"
     "io"
@@ -13,6 +14,7 @@ import (
     "os"
     "regexp"
     "strings"
+    "text/template"
 
     "github.com/golang/protobuf/jsonpb"
     "golang.org/x/net/context"
@@ -56,13 +58,20 @@ func init() {
 }
 
 func main() {
+    defer func() {
+        if r := recover(); r != nil {
+            log.Fatalf("panic in main: %v\n", r.(error))
+        }
+    }()
+
     if len(os.Args) == 1 {
         flag.PrintDefaults()
         return
     }
 
     if *_serve != "" {
-        serveStaticContent("/", MimeHtml, gozip.DecompressString(html))
+        realHtml := genHtml(gozip.DecompressString(html2))
+        serveStaticContent("/", MimeHtml, realHtml)
         serveStaticContent("/m.css", MimeCss, gozip.DecompressString(css))
         serveStaticContent("/m.js", MimeJs, gozip.DecompressString(js))
 
@@ -79,7 +88,7 @@ func main() {
         for _, intr := range q {
             svc, ok := intr.(*lesphina.Interface)
             if !ok {
-                fmt.Println("the obj found is not interface, weird")
+                log.Println("the obj found is not interface, weird")
                 continue
             }
 
@@ -93,30 +102,98 @@ func main() {
     }
 
     if *_call != "" {
-        fmt.Println(callEndpoint(*_call, *_rawRequest))
+        log.Println(callEndpoint(*_call, *_rawRequest))
         return
     }
 }
 
+type HtmlData struct {
+    ArionVersion string
+    Services     []ServiceData
+}
+
+type ServiceData struct {
+    Name      string
+    Endpoints []EndpointData
+}
+
+type EndpointData struct {
+    Name         string
+    ReqElements  []ElementData
+    RespElements []ElementData
+}
+
+type ElementData struct {
+    Name string
+    Type string
+}
+
+func genHtmlData() HtmlData {
+    res := HtmlData{
+        ArionVersion: "0.0.1",
+    }
+
+    rawInterfaces := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
+    for _, intf := range rawInterfaces {
+        svc, ok := intf.(*lesphina.Interface)
+        if !ok {
+            log.Println("the obj found is not interface, weird")
+            continue
+        }
+
+        svcData := ServiceData{
+            Name: svc.GetName(),
+        }
+
+        // each endpoint
+        for _, m := range svc.Methods {
+            endData := EndpointData{
+                Name: m.GetName(),
+            }
+
+            // get endpoint's req struct fields
+            stru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Request").First()
+            if stru != nil {
+                if stru2, ok := stru.(*lesphina.Struct); ok {
+                    for _, f := range stru2.Fields {
+                        endData.ReqElements = append(endData.ReqElements, ElementData{
+                            Name: f.Name,
+                            Type: f.RawType,
+                        })
+                    }
+                }
+            }
+            svcData.Endpoints = append(svcData.Endpoints, endData)
+        }
+        res.Services = append(res.Services, svcData)
+    }
+
+    return res
+}
+
+func genHtml(raw string) string {
+    t, err := template.New("html2").Parse(raw)
+    if err != nil {
+        panic(err)
+    }
+
+    var buf bytes.Buffer
+    if err := t.Execute(&buf, genHtmlData()); err != nil {
+        panic(err)
+    }
+    return buf.String()
+}
+
 func serveStaticContent(path, mime, content string) {
     http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-        defer func() {
-            if r := recover(); r != nil {
-                io.WriteString(w, r.(error).Error())
-            }
-        }()
-
+        defer recoverHandling(w)
         w.Header().Add("Content-Type", mime)
         io.WriteString(w, content)
     })
 }
 
 func handleGetType(w http.ResponseWriter, r *http.Request) {
-    defer func() {
-        if r := recover(); r != nil {
-            io.WriteString(w, r.(error).Error())
-        }
-    }()
+    defer recoverHandling(w)
 
     typeName := strings.TrimSpace(r.URL.Query().Get("n"))
     if typeName == "" {
@@ -141,15 +218,12 @@ func handleGetType(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetMeta(w http.ResponseWriter, r *http.Request) {
+    defer recoverHandling(w)
     io.WriteString(w, _les.Meta.Json())
 }
 
 func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
-    defer func() {
-        if r := recover(); r != nil {
-            io.WriteString(w, r.(error).Error())
-        }
-    }()
+    defer recoverHandling(w)
 
     if r.Method != "POST" {
         http.Error(w, "only support POST", http.StatusBadRequest)
@@ -260,4 +334,10 @@ func getMethodPath(svcName, endName string) (res string, err error) {
         return m[0][1], nil
     }
     return "", fmt.Errorf("No match in rawBody")
+}
+
+func recoverHandling(w http.ResponseWriter) {
+    if r := recover(); r != nil {
+        io.WriteString(w, r.(error).Error())
+    }
 }

@@ -121,16 +121,18 @@ func getCompressedStatic(filename string) string {
 	}
 
 	htmlContent := compressFileContent(filepath.Join(*targetDir, "/web/index.html"))
+	htmlTemplate := compressFileContent(filepath.Join(*targetDir, "/snippets/t_index.html.txt"))
 	cssContent := compressFileContent(filepath.Join(*targetDir, "/web/m.css"))
 	jsContent := compressFileContent(filepath.Join(*targetDir, "/web/m.js"))
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, struct {
-		HtmlSource, CssSource, JsSource string
+		HtmlSource, CssSource, JsSource, HtmlTemplate string
 	}{
-		HtmlSource: htmlContent,
-		CssSource:  cssContent,
-		JsSource:   jsContent,
+		HtmlSource:   htmlContent,
+		CssSource:    cssContent,
+		JsSource:     jsContent,
+		HtmlTemplate: htmlTemplate,
 	}); err != nil {
 		panic(err)
 	}
