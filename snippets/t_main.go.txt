@@ -40,6 +40,7 @@ var (
 )
 
 const (
+    Ver      = "0.0.1"
     MimeHtml = "text/html"
     MimeCss  = "text/css"
     MimeJs   = "text/javascript"
@@ -130,7 +131,7 @@ type ElementData struct {
 
 func genHtmlData() HtmlData {
     res := HtmlData{
-        ArionVersion: "0.0.1",
+        ArionVersion: Ver,
     }
 
     rawInterfaces := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()

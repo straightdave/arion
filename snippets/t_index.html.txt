@@ -53,7 +53,7 @@
 
                         <div class="end-buttons">
                             <a class="button" href="#" id="invokebutton{{- $endpoint.Name -}}" onclick="invokeCall(this)">Invoke</a>
-                            <a class="button" href="#">Format</a>
+                            <a class="button" href="#" id="resetbutton{{- $endpoint.Name -}}" onclick="resetReqData(this)">Reset</a>
                         </div>
                         <div class="clear"></div>
                     </div>

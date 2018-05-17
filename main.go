@@ -14,71 +14,61 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/fatih/color"
 	gozip "github.com/straightdave/gozip/lib"
 	"github.com/straightdave/lesphina"
 )
 
 var (
-	source  = flag.String("src", "", "source pb.go file")
-	outFile = flag.String("out", "xclient", "output file")
-	isClean = flag.Bool("clean", false, "to remove the temp files")
-
+	sourceFile       = flag.String("src", "", "source pb.go file")
+	outFile          = flag.String("out", "postgal", "output executable binary file")
 	regexPackageLine = regexp.MustCompile(`package (.+)`)
 )
 
 func main() {
 	flag.Parse()
+	green := color.New(color.FgGreen).SprintfFunc()
 
-	if *source == "" {
-		fmt.Println("source cannot be blank")
-		return
+	if *sourceFile == "" {
+		log.Fatalln("sourceFile cannot be blank")
 	}
 
-	// create temp dir inside current dir
+	// generate temporary folder in current one
 	tmpDir, err := ioutil.TempDir(".", "temp")
 	if err != nil {
-		fmt.Println("cannot create temp dir:", err.Error())
-		return
-	}
-	if *isClean {
-		defer os.RemoveAll(tmpDir)
+		log.Fatalln("cannot create temp dir:", err.Error())
 	}
 
-	// gen modified pb file
-	err = genTempPbFile(*source, tmpDir, "pb")
+	// modify package name of the pb.go file
+	err = genTempPbFile(*sourceFile, tmpDir, "pb")
 	if err != nil {
-		fmt.Println("failed to gen new pb:", err.Error())
-		return
+		log.Fatalln("failed to gen new pb:", err.Error())
 	}
 
-	// gen meta snippet file
-	err = genMetaFile(*source, tmpDir, "meta")
+	// generate source code of meta info used by Lesphina
+	err = genMetaFile(*sourceFile, tmpDir, "meta")
 	if err != nil {
-		fmt.Println("failed to gen meta:", err.Error())
-		return
+		log.Fatalln("failed to gen meta:", err.Error())
 	}
 
 	// restore main.go
 	err = restoreFile(_compressedMain, tmpDir, "main")
 	if err != nil {
-		fmt.Println("failed to restore main:", err.Error())
-		return
+		log.Fatalln("failed to restore main:", err.Error())
 	}
 
 	// restore static.go
 	err = restoreFile(_compressedStatic, tmpDir, "static")
 	if err != nil {
-		fmt.Println("failed to restore static:", err.Error())
-		return
+		log.Fatalln("failed to restore static:", err.Error())
 	}
 
 	// compile all
 	err = compileDir(tmpDir, *outFile)
 	if err != nil {
-		fmt.Println("failed to compile:", err.Error())
-		return
+		log.Fatalln("failed to compile:", err.Error())
 	}
-	fmt.Println("SUCCESS")
+	log.Println(green("SUCCESS"))
 }
 
 func genTempPbFile(sourceFile, dirName, fileName string) error {
