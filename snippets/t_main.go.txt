@@ -152,10 +152,10 @@ func genHtmlData() HtmlData {
             }
 
             // get endpoint's req struct fields
-            stru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Request").First()
-            if stru != nil {
-                if stru2, ok := stru.(*lesphina.Struct); ok {
-                    for _, f := range stru2.Fields {
+            reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Request").First()
+            if reqstru != nil {
+                if st, ok := reqstru.(*lesphina.Struct); ok {
+                    for _, f := range st.Fields {
                         endData.ReqElements = append(endData.ReqElements, ElementData{
                             Name: f.Name,
                             Type: f.RawType,
@@ -163,6 +163,20 @@ func genHtmlData() HtmlData {
                     }
                 }
             }
+
+            // get endpoint's resp struct fields
+            respstru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Response").First()
+            if respstru != nil {
+                if st, ok := respstru.(*lesphina.Struct); ok {
+                    for _, f := range st.Fields {
+                        endData.RespElements = append(endData.RespElements, ElementData{
+                            Name: f.Name,
+                            Type: f.RawType,
+                        })
+                    }
+                }
+            }
+
             svcData.Endpoints = append(svcData.Endpoints, endData)
         }
         res.Services = append(res.Services, svcData)

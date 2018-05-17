@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Master Client</title>
+    <title>PostGal</title>
     <link rel='stylesheet' type='text/css' href='m.css'>
 </head>
 <body>
     <div class="topbar">
-        <div class="topbar-title">&copy; Master Client {{ .ArionVersion }}</div>
+        <div class="topbar-title">&copy; PostGal v{{- .ArionVersion -}}</div>
         <div class="topbar-buttons">
         </div>
     </div>
@@ -18,17 +18,44 @@
             <ul>
                 {{ range $endpoint := $svc.Endpoints }}
                 <li class="end">
-                    <div class="end-title">{{ $endpoint.Name }}</div>
+                    <div class="end-title" onclick="toggleInvokePanel(this)">{{ $endpoint.Name }}</div>
                     <div class="end-desc">
-                        <h3 class="eletitle"># {{- $endpoint.Name -}} Request</h3>
-                        <ul>
-                            {{ range $ele := $endpoint.ReqElements }}
-                            <li>
-                                <span class="eleName">{{ $ele.Name }}</span>
-                                <span class="eleType">{{ $ele.Type }}</span>
-                            </li>
-                            {{ end }}
-                        </ul>
+                        <div class="end-desc-split">
+                            <h3 class="eletitle"># {{- $endpoint.Name -}} Request</h3>
+                            <ul>
+                                {{ range $ele := $endpoint.ReqElements }}
+                                <li>
+                                    <span class="eleName">{{ $ele.Name }}</span>
+                                    <span class="eleType">{{ $ele.Type }}</span>
+                                </li>
+                                {{ end }}
+                            </ul>
+                        </div>
+                        <div class="end-desc-split">
+                            <h3 class="eletitle"># {{- $endpoint.Name -}} Response</h3>
+                            <ul>
+                                {{ range $ele := $endpoint.RespElements }}
+                                <li>
+                                    <span class="eleName">{{ $ele.Name }}</span>
+                                    <span class="eleType">{{ $ele.Type }}</span>
+                                </li>
+                                {{ end }}
+                            </ul>
+                        </div>
+                        <div class="clear"></div>
+                    </div>
+
+                    <div class="invoke-panel invisible" id="invokepanel{{- $endpoint.Name -}}">
+                        <div class="end-input">
+                            <textarea id="invokebody{{- $endpoint.Name -}}"></textarea>
+                        </div>
+                        <div class="end-output" id="invokeresult{{- $endpoint.Name -}}"></div>
+
+                        <div class="end-buttons">
+                            <a class="button" href="#" id="invokebutton{{- $endpoint.Name -}}" onclick="invokeCall(this)">Invoke</a>
+                            <a class="button" href="#">Format</a>
+                        </div>
+                        <div class="clear"></div>
                     </div>
                 </li>
                 {{ end }}

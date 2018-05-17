@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Master Client</title>
+    <title>PostGal</title>
     <link rel='stylesheet' type='text/css' href='m.css'>
 </head>
 <body>
     <div class="topbar">
-        <div class="topbar-title">&copy; Master Client (v1.23.456)</div>
+        <div class="topbar-title">&copy; PostGal v1.23.456</div>
         <div class="topbar-buttons">
             <a class="button" href="/">Button1</a>
             <a class="button" href="/">Button2</a>
@@ -18,60 +18,46 @@
         <div class="list">
             <ul>
                 <li class="end">
-                    <div class="end-title" id="1">Hello</div>
+                    <div class="end-title" onclick="toggleInvokePanel(this)">Hello</div>
 
                     <div class="end-panel">
-
                         <div class="end-desc">
-                            <h3 class="eletitle">#HelloRequest</h3>
-                            <ul>
-                                <li>
-                                    <span class="eleName">Name</span>
-                                    <span class="eleType">string</span>
-                                </li>
-                            </ul>
-
+                            <div class="end-desc-split">
+                                <h3 class="eletitle"># HelloRequest</h3>
+                                <ul>
+                                    <li>
+                                        <span class="eleName">Name</span>
+                                        <span class="eleType">string</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="end-desc-split">
+                                <h3 class="eletitle"># HelloResponse</h3>
+                                <ul>
+                                    <li>
+                                        <span class="eleName">Name</span>
+                                        <span class="eleType">string</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="clear"></div>
                         </div>
 
-                        <div class="end-input">
-<textarea>
-{
-    "Name": "dave"
-}
-</textarea>
-                        </div>
-                        <div class="end-output">
-                            asdfasdf asdf
-                        </div>
+                        <div class="invoke-panel invisible" id="invokepanelHello">
+                            <div class="end-input">
+                                <textarea id="invokebodyHello"></textarea>
+                            </div>
+                            <div class="end-output" id="invokeresultHello"></div>
 
-                        <div class="clear"></div>
-                        <div class="end-buttons">
-                            <a class="button" href="#">Invoke</a>
-                            <a class="button" href="#">Format</a>
+                            <div class="end-buttons">
+                                <a class="button" href="#" onclick="invokeCall(this)" id="invokebuttonHello">Invoke</a>
+                                <a class="button" href="#">Format</a>
+                            </div>
+                            <div class="clear"></div>
                         </div>
-                        <div class="clear"></div>
                     </div>
                 </li>
-                <li class="end">
-                    <div class="end-title">GetMerchant</div>
-                </li>
-            </ul>
-        </div>
-    </div>
 
-    <div class="panel">
-        <h1 class="svctitle">Some service</h1>
-        <div class="list">
-            <ul>
-                <li class="end">
-                    <div class="end-title">Endpoint-1</div>
-                </li>
-                <li class="end">
-                    <div class="end-title">Endpoint-2</div>
-                </li>
-                <li class="end">
-                    <div class="end-title">Endpoint-3</div>
-                </li>
             </ul>
         </div>
     </div>

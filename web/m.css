@@ -47,9 +47,13 @@ div.clear {
     clear: both;
 }
 
+div.invisible {
+    display: none;
+}
+
 div.topbar {
     background-color: #E0EBF5;
-    height: 67px;
+    height: 60px;
     width: 100%;
     position: relative;
 }
@@ -58,7 +62,7 @@ div.topbar-title {
     color: #222;
     font-size: 20px;
     position: absolute;
-    top: 17px;
+    top: 14px;
     left: 20px;
 }
 
@@ -71,7 +75,7 @@ div.topbar-buttons {
 div.topbar-buttons > a.button {
     display: block;
     margin: 10px 5px;
-    padding: 10px;
+    padding: 7px;
     float: left;
     background-color: #375EAB;
     color: white;
@@ -87,7 +91,6 @@ div.panel {
 
 h1.svctitle {
     display: block;
-
     font-size: 28px;
     font-weight: bold;
     line-height: 1;
@@ -118,6 +121,12 @@ div.end-desc {
     border: 2px solid #E0EBF5;
 }
 
+div.end-desc div.end-desc-split {
+    float: left;
+    width: 47%;
+    margin-left: 10px;
+}
+
 div.end-input {
     margin-top: 10px;
     padding: 10px;
@@ -125,13 +134,13 @@ div.end-input {
     background: #FFFFD8;
     border-top-right-radius: 5px;
     border-top-left-radius: 5px;
-    overflow: hidden;
+    overflow-y: hidden;
 }
 div.end-input > textarea {
     border: none;
     outline: none;
     resize: none;
-    overflow: hidden;
+    overflow-y: scroll;
 
     padding: 0;
     margin: 0;
