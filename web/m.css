@@ -66,14 +66,24 @@ div.topbar-title {
     left: 20px;
 }
 
-div.topbar-buttons {
+div.topbar-controls {
     position: absolute;
     right: 10px;
-    text-align: left;
+    height: 100%;
 }
 
-div.topbar-buttons > a.button {
+div.topbar-controls > input {
     display: block;
+    float: left;
+    border: none;
+    height: 35px;
+    margin: 12px;
+    padding: 0px 10px;
+    font-size: 20px;
+    font-family: Menlo, monospace;
+}
+
+div.topbar-controls > button {
     margin: 10px 5px;
     padding: 7px;
     float: left;
@@ -112,10 +122,6 @@ li.end > div.end-title {
     user-select: none;
 }
 
-li.end > div.end-panel {
-
-}
-
 div.end-desc {
     padding: 10px;
     border: 2px solid #E0EBF5;
@@ -136,6 +142,7 @@ div.end-input {
     border-top-left-radius: 5px;
     overflow-y: hidden;
 }
+
 div.end-input > textarea {
     border: none;
     outline: none;
@@ -158,13 +165,14 @@ div.end-input > textarea {
 
     background-color: #FFFFD8;
     width: 100%;
-    height: 300px;
+    height: 250px;
 }
 div.end-output {
     border: 1px solid #375EAB;
     background: #FFFFD8;
     border-top: none !important;
     padding: 10px;
+    min-height: 30px;
     max-height: 200px;
     overflow: auto;
     border-bottom-right-radius: 5px;

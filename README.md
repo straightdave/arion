@@ -6,28 +6,27 @@ arion
 > go get github.com/straightdave/arion
 ```
 
-## Use Arion to generate XClient
+## Use Arion to generate PostGal
 ```bash
 > arion -src <your.any.pb.go>
 ```
 >In this process, after all temporary source code are generated,
 Arion will try to call local `go` to compile.
 
-
-go to temporary dir and use the binary `xclient`:
+go to temporary dir and use the binary `postgal`:
 ```bash
 # list endpoints
-tmpDir> ./xclient -list
+tmpDir> ./postgal -list
 
 # invoke
-tmpDir> ./xclient -call SomeEndpoint -req '{"field": 123}'
+tmpDir> ./postgal -call SomeEndpoint -req '{"field": 123}'
 ```
 or start as web page:
 ```bash
-tmpDir> ./xclient -serve ":8888"
+tmpDir> ./postgal -serve ":9999"
 ```
 
-## Develop
+## Development
 
 ### build
 ```bash

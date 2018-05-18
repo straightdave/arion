@@ -11,11 +11,13 @@ import (
     "io/ioutil"
     "log"
     "net/http"
+    "net/url"
     "os"
     "regexp"
     "strings"
     "text/template"
 
+    "github.com/fatih/color"
     "github.com/golang/protobuf/jsonpb"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
@@ -25,18 +27,17 @@ import (
 )
 
 var (
+    // global lesphina instance
+    _les *lesphina.Lesphina
+    // flags
+    _serve      = flag.Bool("serve", false, "use PostGal in browser mode")
     _list       = flag.Bool("list", false, "list all endpoints")
-    _serve      = flag.String("serve", "", "if specified, serve stub as http service")
+    _arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
     _host       = flag.String("host", ":8087", "host of target service")
     _call       = flag.String("call", "", "method name to call")
-    _rawRequest = flag.String("req", "", "raw request json")
-
+    _rawRequest = flag.String("req", "{}", "raw request json")
+    // regex to find endpoint call path
     _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
-)
-
-var (
-    _les  *lesphina.Lesphina
-    _conn *grpc.ClientConn
 )
 
 const (
@@ -45,43 +46,40 @@ const (
     MimeCss  = "text/css"
     MimeJs   = "text/javascript"
     MimeJson = "application/json"
+    // default arion serving port (only used in browser mode)
+    _defaultPort = "9999"
 )
 
 func init() {
     flag.Parse()
-
     _les = lesphina.Restore(_lesDump)
-
-    var err error
-    if _conn, err = grpc.Dial(*_host, grpc.WithInsecure()); err != nil {
-        log.Fatalf("[init] failed to dial: %v\n", err)
-    }
 }
 
 func main() {
     defer func() {
         if r := recover(); r != nil {
-            log.Fatalf("panic in main: %v\n", r.(error))
+            log.Fatalf("Recovered panic in main: %v\n", r.(error))
         }
     }()
+    red := color.New(color.FgRed).SprintfFunc()
 
     if len(os.Args) == 1 {
         flag.PrintDefaults()
         return
     }
 
-    if *_serve != "" {
+    // if _serve is provided, browser mode
+    if *_serve {
         realHtml := genHtml(gozip.DecompressString(html2))
         serveStaticContent("/", MimeHtml, realHtml)
         serveStaticContent("/m.css", MimeCss, gozip.DecompressString(css))
         serveStaticContent("/m.js", MimeJs, gozip.DecompressString(js))
-
         http.HandleFunc("/type", handleGetType)
         http.HandleFunc("/meta", handleGetMeta)
         http.HandleFunc("/call", handleCallEndpoint)
-
-        srv := &http.Server{Addr: *_serve}
+        srv := &http.Server{Addr: *_arionHost}
         log.Fatal(srv.ListenAndServe())
+        // blocking until ctrl-C is hit, and then app exits
     }
 
     if *_list {
@@ -92,7 +90,6 @@ func main() {
                 log.Println("the obj found is not interface, weird")
                 continue
             }
-
             fmt.Println(svc.GetName())
             for _, m := range svc.Methods {
                 fmt.Printf("> %s\n", m.GetName())
@@ -103,13 +100,30 @@ func main() {
     }
 
     if *_call != "" {
-        log.Println(callEndpoint(*_call, *_rawRequest))
-        return
+        resp, err := callEndpoint(*_call, *_host, *_rawRequest)
+        if err != nil {
+            fmt.Println(red("ERROR ") + err.Error())
+            return
+        }
+        fmt.Println(resp)
     }
+}
+
+func getPort(rawAddress string) string {
+    splits := strings.Split(rawAddress, ":")
+    if len(splits) >= 2 {
+        last := splits[len(splits)-1]
+        last = strings.TrimSpace(last)
+        if last != "" {
+            return last
+        }
+    }
+    return _defaultPort
 }
 
 type HtmlData struct {
     ArionVersion string
+    ArionPort    string
     Services     []ServiceData
 }
 
@@ -132,6 +146,7 @@ type ElementData struct {
 func genHtmlData() HtmlData {
     res := HtmlData{
         ArionVersion: Ver,
+        ArionPort:    getPort(*_arionHost),
     }
 
     rawInterfaces := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
@@ -182,7 +197,6 @@ func genHtmlData() HtmlData {
         }
         res.Services = append(res.Services, svcData)
     }
-
     return res
 }
 
@@ -245,8 +259,20 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    endpointName := strings.TrimSpace(r.URL.Query().Get("e"))
+    v, err := url.ParseQuery(r.URL.RawQuery)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    endpointName := v.Get("e")
     if endpointName == "" {
+        http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
+        return
+    }
+
+    hostAddr := v.Get("h")
+    if hostAddr == "" {
         http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
         return
     }
@@ -257,16 +283,31 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    io.WriteString(w, callEndpoint(endpointName, string(body)))
+    res, err := callEndpoint(endpointName, hostAddr, string(body))
+    if err != nil {
+        io.WriteString(w, err.Error())
+        return
+    }
+    io.WriteString(w, res)
 }
 
-func callEndpoint(endpointName, rawRequest string) (res string) {
+func callEndpoint(endpointName, hostAddr, rawRequest string) (res string, err error) {
     defer func() {
         if r := recover(); r != nil {
-            res = fmt.Sprintf("Panic in CallEndpoint: %v", r.(error))
+            err = r.(error)
         }
     }()
 
+    // get new connection
+    conn, err := grpc.Dial(hostAddr, grpc.WithInsecure())
+    if err != nil {
+        return
+    }
+    defer conn.Close()
+
+    // endpointName could be in two formats:
+    // * endpoint_name
+    // * svc_name#endpoint_name (if multiple svc)
     var svcName, endName string
     i := strings.LastIndex(endpointName, "#")
     if i > 0 {
@@ -276,31 +317,34 @@ func callEndpoint(endpointName, rawRequest string) (res string) {
         endName = endpointName
     }
 
+    // to get accurate method path by parsing pb source
+    // with svc_name and end_name
     method, err := getMethodPath(svcName, endName)
     if err != nil {
-        return "Parsing method path failed: " + err.Error()
+        return
     }
 
+    // get request obj (of type proto.Message)
     req := getVarByTypeName(endName + "Request")
     if req == nil {
-        return "No such type: " + endName + "Request"
+        return "", fmt.Errorf("Failed to get request object")
     }
 
+    // get response obj (of type proto.Message)
     reply := getVarByTypeName(endName + "Response")
     if reply == nil {
-        return "No such type: " + endName + "Response"
+        return "", fmt.Errorf("Failed to get response object")
     }
 
-    if err := jsonpb.UnmarshalString(rawRequest, req); err != nil {
-        return "Cannot unmarshal raw request value: " + err.Error()
+    if err = jsonpb.UnmarshalString(rawRequest, req); err != nil {
+        return
     }
 
-    ctx := context.Background()
-    var opts []grpc.CallOption
-    if err := _conn.Invoke(ctx, method, req, reply, opts...); err != nil {
-        return "Invoking failed: " + err.Error()
+    if err = conn.Invoke(context.Background(), method, req, reply,
+        grpc.EmptyCallOption{}); err != nil {
+        return
     }
-    return reply.String()
+    return reply.String(), nil
 }
 
 func getMethodPath(svcName, endName string) (res string, err error) {
