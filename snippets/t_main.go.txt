@@ -139,8 +139,9 @@ type EndpointData struct {
 }
 
 type ElementData struct {
-    Name string
-    Type string
+    Name          string
+    Type          string
+    JsonFieldName string
 }
 
 func genHtmlData() HtmlData {
@@ -173,8 +174,9 @@ func genHtmlData() HtmlData {
                 if st, ok := reqstru.(*lesphina.Struct); ok {
                     for _, f := range st.Fields {
                         endData.ReqElements = append(endData.ReqElements, ElementData{
-                            Name: f.Name,
-                            Type: f.RawType,
+                            Name:          f.Name,
+                            Type:          f.RawType,
+                            JsonFieldName: f.JsonFieldName(),
                         })
                     }
                 }
@@ -186,8 +188,9 @@ func genHtmlData() HtmlData {
                 if st, ok := respstru.(*lesphina.Struct); ok {
                     for _, f := range st.Fields {
                         endData.RespElements = append(endData.RespElements, ElementData{
-                            Name: f.Name,
-                            Type: f.RawType,
+                            Name:          f.Name,
+                            Type:          f.RawType,
+                            JsonFieldName: f.JsonFieldName(),
                         })
                     }
                 }

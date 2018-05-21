@@ -29,6 +29,7 @@
                                 <li>
                                     <span class="eleName">{{ $ele.Name }}</span>
                                     <span class="eleType">{{ $ele.Type }}</span>
+                                    <span class="eleName">(json: {{ $ele.JsonFieldName }})</span>
                                 </li>
                                 {{ end }}
                             </ul>
@@ -40,6 +41,7 @@
                                 <li>
                                     <span class="eleName">{{ $ele.Name }}</span>
                                     <span class="eleType">{{ $ele.Type }}</span>
+                                    <span class="eleName">(json: {{ $ele.JsonFieldName }})</span>
                                 </li>
                                 {{ end }}
                             </ul>
