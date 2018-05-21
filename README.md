@@ -8,7 +8,7 @@ arion
 
 ## Use Arion to generate PostGal
 ```bash
-> arion -src <your.any.pb.go>
+> ./arion -src <your.any.pb.go>
 ```
 >In this process, after all temporary source code are generated,
 Arion will try to call local `go` to compile.
@@ -21,10 +21,11 @@ tmpDir> ./postgal -list
 # invoke
 tmpDir> ./postgal -call SomeEndpoint -req '{"field": 123}'
 ```
-or start as web page:
+or start in broswer mode:
 ```bash
-tmpDir> ./postgal -serve ":9999"
+tmpDir> ./postgal -serve
 ```
+Then you can open browsers to use PostGal.
 
 ## Development
 
