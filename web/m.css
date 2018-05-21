@@ -108,9 +108,9 @@ h1.svctitle {
     margin: 20px 20px;
 }
 
-li.end {
+li.end, li.typeref-item {
     display: block;
-    margin: 10px 20px;
+    margin: 20px;
     font-size: 20px;
 }
 

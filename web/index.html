@@ -60,6 +60,93 @@
                     </div>
                 </li>
 
+                <li class="end">
+                    <div class="end-title" onclick="toggleInvokePanel(this)">Hello2</div>
+
+                    <div class="end-panel">
+                        <div class="end-desc">
+                            <div class="end-desc-split">
+                                <h3 class="eletitle"># HelloRequest</h3>
+                                <ul>
+                                    <li>
+                                        <span class="eleName">Name</span>
+                                        <span class="eleType">string</span>
+                                        <span class="eleName">(json: haha)</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="end-desc-split">
+                                <h3 class="eletitle"># HelloResponse</h3>
+                                <ul>
+                                    <li>
+                                        <span class="eleName">Name</span>
+                                        <span class="eleType">string</span>
+                                        <span class="eleName">(json: hoho)</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="clear"></div>
+                        </div>
+
+                        <div class="invoke-panel invisible" id="invokepanelHello">
+                            <div class="end-input">
+                                <textarea id="invokebodyHello"></textarea>
+                            </div>
+                            <div class="end-output" id="invokeresultHello"></div>
+
+                            <div class="end-buttons">
+                                <a class="button" href="#" onclick="invokeCall(this)" id="invokebuttonHello">Invoke</a>
+                                <a class="button" href="#">Format</a>
+                            </div>
+                            <div class="clear"></div>
+                        </div>
+                    </div>
+                </li>
+
+            </ul>
+        </div>
+    </div>
+
+    <!-- type reference -->
+    <div class="panel">
+        <h1 class="svctitle">Reference</h1>
+        <div class="list">
+            <ul>
+                <li class="typeref-item">
+                    <h3 class="eletitle"># Struct-1</h3>
+                    <ul>
+                        <li>
+                            <span class="eleName">Field</span>
+                            <span class="eleType">string</span>
+                            <span class="eleName">(json: xixixix)</span>
+                        </li>
+                        <li>
+                            <span class="eleName">Field2</span>
+                            <span class="eleType">string</span>
+                            <span class="eleName">(json: bbb)</span>
+                        </li>
+                    </ul>
+                </li>
+                <li class="typeref-item">
+                    <h3 class="eletitle"># Struct-2</h3>
+                    <ul>
+                        <li>
+                            <span class="eleName">Field</span>
+                            <span class="eleType">string</span>
+                            <span class="eleName">(json: xixixix)</span>
+                        </li>
+                    </ul>
+                </li>
+                <li class="typeref-item">
+                    <h3 class="eletitle"># Struct-3</h3>
+                    <ul>
+                        <li>
+                            <span class="eleName">Field</span>
+                            <span class="eleType">string</span>
+                            <span class="eleName">(json: xixixix)</span>
+                        </li>
+                    </ul>
+                </li>
             </ul>
         </div>
     </div>

@@ -23,7 +23,7 @@
                     <div class="end-title" onclick="toggleInvokePanel(this)">{{ $endpoint.Name }}</div>
                     <div class="end-desc">
                         <div class="end-desc-split">
-                            <h3 class="eletitle"># {{- $endpoint.Name -}} Request</h3>
+                            <h3 class="eletitle"># {{ $endpoint.Name -}} Request</h3>
                             <ul>
                                 {{ range $ele := $endpoint.ReqElements }}
                                 <li>
@@ -35,7 +35,7 @@
                             </ul>
                         </div>
                         <div class="end-desc-split">
-                            <h3 class="eletitle"># {{- $endpoint.Name -}} Response</h3>
+                            <h3 class="eletitle"># {{ $endpoint.Name -}} Response</h3>
                             <ul>
                                 {{ range $ele := $endpoint.RespElements }}
                                 <li>
@@ -67,6 +67,29 @@
         </div>
     </div>
     {{ end }}
+
+    <!-- type reference -->
+    <div class="panel">
+        <h1 class="svctitle">Reference</h1>
+        <div class="list">
+            <ul>
+                {{ range $struct := .Reference }}
+                <li class="typeref-item">
+                    <h3 class="eletitle"># {{ $struct.Name }}</h3>
+                    <ul>
+                        {{ range $ele := $struct.Fields }}
+                        <li>
+                            <span class="eleName">{{ $ele.Name }}</span>
+                            <span class="eleType">{{ $ele.Type }}</span>
+                            <span class="eleName">(json: {{ $ele.JsonFieldName }})</span>
+                        </li>
+                        {{ end }}
+                    </ul>
+                </li>
+                {{ end }}
+            </ul>
+        </div>
+    </div>
 
     <script src='m.js' type='text/javascript'></script>
 </body>

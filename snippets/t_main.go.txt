@@ -125,6 +125,12 @@ type HtmlData struct {
     ArionVersion string
     ArionPort    string
     Services     []ServiceData
+    Reference    []Struct
+}
+
+type Struct struct {
+    Name   string
+    Fields []ElementData
 }
 
 type ServiceData struct {
@@ -199,6 +205,28 @@ func genHtmlData() HtmlData {
             svcData.Endpoints = append(svcData.Endpoints, endData)
         }
         res.Services = append(res.Services, svcData)
+    }
+
+    rawAllStructs := _les.Query().ByKind(lesphina.KindStruct).All()
+    for _, stru := range rawAllStructs {
+        s, ok := stru.(*lesphina.Struct)
+        if !ok {
+            log.Println("the obj found is not Struct, weird")
+            continue
+        }
+
+        structData := Struct{
+            Name: s.Name,
+        }
+
+        for _, f := range s.Fields {
+            structData.Fields = append(structData.Fields, ElementData{
+                Name:          f.Name,
+                Type:          f.RawType,
+                JsonFieldName: f.JsonFieldName(),
+            })
+        }
+        res.Reference = append(res.Reference, structData)
     }
     return res
 }
