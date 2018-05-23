@@ -173,7 +173,7 @@ func compileDir(dirName, binFileName string) error {
 	}
 
 	var opts []string
-	opts = append(opts, "build", "-v", "-o", fullName, dirName)
+	opts = append(opts, "build", "-i", "-v", "-o", fullName, dirName)
 
 	return exec.Command("go", opts...).Run()
 }
