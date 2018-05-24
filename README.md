@@ -28,7 +28,10 @@ Then Arion will generate a temporary folder containing source files and compile 
 executable binary called *PostGal*.
 
 *NOTE*
-When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages.
+When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages including:
+* github.com/golang/protobuf/jsonpb
+* golang.org/x/net/context
+* google.golang.org/grpc
 
 ## Use PostGal
 
