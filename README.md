@@ -59,7 +59,7 @@ In the PostGal web page, you can easily:
 2. call endpoints
 3. change endpoint locations (gRPC server, IP:port)
 
-You can use this page to play with gRPC services as you do the similar thing against HTTP.
+You can use this page to play with gRPC services as you do the similar thing against HTTP with Postman.
 
 ## Development
 
