@@ -1,5 +1,7 @@
 Arion
 =======
+[![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
+
 Arion is a gRPC tool to:
 - get endpoints definition
 - debug endpoints
