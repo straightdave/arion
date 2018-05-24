@@ -196,11 +196,7 @@ func compileDir(dirName, binFileName string) error {
 
 	// run go get ./... first
 	log.Println("install all dependencies...")
-	err = exec.Command("go", "get", "./...").Run()
-	if err != nil {
-		log.Println("failed to get all dependencies:", err.Error())
-		return err
-	}
+	_ = exec.Command("go", "get", "./...").Run() // ignore exit error
 
 	// build
 	var opts []string
