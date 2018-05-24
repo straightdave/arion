@@ -164,16 +164,51 @@ func compileDir(dirName, binFileName string) error {
 		dirName = "./" + dirName
 	}
 
-	fullName := filepath.Join(dirName, binFileName)
-	log.Println("compiling to file:", fullName)
-
 	_, err := exec.LookPath("go")
 	if err != nil {
+		log.Println("no go installed")
 		return err
 	}
 
-	var opts []string
-	opts = append(opts, "build", "-i", "-v", "-o", fullName, dirName)
+	// get current dir
+	cDir, err := os.Getwd()
+	if err != nil {
+		log.Println("failed to get working dir:", err.Error())
+		return err
+	}
 
-	return exec.Command("go", opts...).Run()
+	// change dir
+	log.Println("change dir to", dirName)
+	err = os.Chdir(dirName)
+	if err != nil {
+		log.Println("failed to change dir:", err.Error())
+		return err
+	}
+
+	// change dir back
+	defer func() {
+		log.Println("change dir back to", cDir)
+		err = os.Chdir(cDir)
+		if err != nil {
+			log.Println("failed to change dir:", err.Error())
+		}
+	}()
+
+	// run go get ./... first
+	log.Println("install all dependencies...")
+	err = exec.Command("go", "get", "./...").Run()
+	if err != nil {
+		log.Println("failed to get all dependencies:", err.Error())
+		return err
+	}
+
+	// build
+	var opts []string
+	opts = append(opts, "build", "-v", "-o", binFileName)
+	err = exec.Command("go", opts...).Run()
+	if err != nil {
+		log.Println("failed to compile:", err.Error())
+		return err
+	}
+	return nil
 }
