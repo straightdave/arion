@@ -56,8 +56,8 @@
                         <div class="end-output" id="invokeresult{{- $endpoint.Name -}}"></div>
 
                         <div class="end-buttons">
-                            <a class="button" href="#" id="invokebutton{{- $endpoint.Name -}}" onclick="invokeCall(this)">Invoke</a>
-                            <a class="button" href="#" id="resetbutton{{- $endpoint.Name -}}" onclick="resetReqData(this)">Reset</a>
+                            <button class="button" href="#" id="invokebutton{{- $endpoint.Name -}}" onclick="invokeCall(this)">Invoke</button>
+                            <button class="button" href="#" id="resetbutton{{- $endpoint.Name -}}" onclick="resetReqData(this)">Reset</button>
                         </div>
                         <div class="clear"></div>
                     </div>
