@@ -16,32 +16,38 @@ import (
     "regexp"
     "strings"
     "text/template"
+    "time"
 
-    "github.com/fatih/color"
     "github.com/golang/protobuf/jsonpb"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
 
     gozip "github.com/straightdave/gozip/lib"
     "github.com/straightdave/lesphina"
+    trunks "github.com/straightdave/trunks/lib"
 )
 
 var (
-    // global lesphina instance
-    _les *lesphina.Lesphina
-    // flags
-    _serve      = flag.Bool("serve", false, "use PostGal in browser mode")
-    _list       = flag.Bool("list", false, "list all endpoints")
-    _arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
-    _host       = flag.String("host", ":8087", "host of target service")
-    _call       = flag.String("call", "", "method name to call")
-    _rawRequest = flag.String("req", "{}", "raw request json")
-    // regex to find endpoint call path
+    _les             *lesphina.Lesphina
     _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
+    _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
+
+    // flags of browser mode
+    _serve     = flag.Bool("serve", false, "use PostGal in browser mode")
+    _arionHost = flag.String("at", ":9999", "address to host PostGal in browser mode")
+
+    // flags of console mode
+    _info     = flag.Bool("l", false, "list all endpoints")
+    _hosts    = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
+    _execute  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+    _masssive = flag.Bool("x", false, "massive call endpoint (need rate and duration)")
+    _data     = flag.String("d", "", "request data")
+    _duration = flag.String("duration", "10s", "execution duration like 10s, 20m")
+    _rate     = flag.Uint64("rate", 1, "execution frequency per second")
 )
 
 const (
-    Ver      = "0.0.1"
+    Ver      = "0.1.0"
     MimeHtml = "text/html"
     MimeCss  = "text/css"
     MimeJs   = "text/javascript"
@@ -56,19 +62,12 @@ func init() {
 }
 
 func main() {
-    defer func() {
-        if r := recover(); r != nil {
-            log.Fatalf("Recovered panic in main: %v\n", r.(error))
-        }
-    }()
-    red := color.New(color.FgRed).SprintfFunc()
-
     if len(os.Args) == 1 {
         flag.PrintDefaults()
         return
     }
 
-    // if _serve is provided, browser mode
+    // browser mode
     if *_serve {
         realHtml := genHtml(gozip.DecompressString(html2))
         serveStaticContent("/", MimeHtml, realHtml)
@@ -79,33 +78,41 @@ func main() {
         http.HandleFunc("/call", handleCallEndpoint)
         srv := &http.Server{Addr: *_arionHost}
         log.Fatal(srv.ListenAndServe())
-        // blocking until ctrl-C is hit, and then app exits
     }
 
-    if *_list {
+    if *_info {
         q := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
         for _, intr := range q {
             svc, ok := intr.(*lesphina.Interface)
             if !ok {
-                log.Println("the obj found is not interface, weird")
+                log.Printf("Obj [%+v] is not interface, weird\n", intr)
                 continue
             }
-            fmt.Println(svc.GetName())
+            fmt.Println(strings.TrimRight(svc.GetName(), "Client"))
             for _, m := range svc.Methods {
                 fmt.Printf("> %s\n", m.GetName())
             }
-            fmt.Println()
         }
         return
     }
 
-    if *_call != "" {
-        resp, err := callEndpoint(*_call, *_host, *_rawRequest)
+    if *_execute != "" {
+        if *_masssive {
+            fmt.Println("Massive Call...")
+            err := MassiveCallEndpoint(*_execute, *_hosts, *_data, *_rate, *_duration)
+            if err != nil {
+                fmt.Println("ERROR", err.Error())
+            }
+            return
+        }
+
+        resp, err := callEndpoint(*_execute, *_hosts, *_data)
         if err != nil {
-            fmt.Println(red("ERROR ") + err.Error())
+            fmt.Println("ERROR", err.Error())
             return
         }
         fmt.Println(resp)
+        return
     }
 }
 
@@ -165,7 +172,7 @@ func genHtmlData() HtmlData {
         }
 
         svcData := ServiceData{
-            Name: svc.GetName(),
+            Name: strings.TrimRight(svc.GetName(), "Client"),
         }
 
         // each endpoint
@@ -322,62 +329,117 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
     io.WriteString(w, res)
 }
 
-func callEndpoint(endpointName, hostAddr, rawRequest string) (res string, err error) {
-    defer func() {
-        if r := recover(); r != nil {
-            err = r.(error)
-        }
-    }()
+func parseEndpointName(rawName string) (string, string) {
+    var svcName, endName string
+    i := strings.LastIndex(rawName, "#")
+    if i > 0 {
+        svcName = rawName[:i]
+        endName = rawName[i+1:]
+    } else {
+        endName = rawName
+    }
+    return svcName, endName
+}
 
-    // get new connection
-    conn, err := grpc.Dial(hostAddr, grpc.WithInsecure())
+func callEndpoint(endpointName, hosts, data string) (res string, err error) {
+    hosts = strings.Trim(hosts, " ,")
+    hostList := strings.Split(hosts, ",")
+
+    conn, err := grpc.Dial(hostList[0], grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
     if err != nil {
         return
     }
     defer conn.Close()
 
-    // endpointName could be in two formats:
-    // * endpoint_name
-    // * svc_name#endpoint_name (if multiple svc)
-    var svcName, endName string
-    i := strings.LastIndex(endpointName, "#")
-    if i > 0 {
-        svcName = endpointName[:i]
-        endName = endpointName[i+1:]
-    } else {
-        endName = endpointName
-    }
+    svcName, endName := parseEndpointName(endpointName)
 
-    // to get accurate method path by parsing pb source
-    // with svc_name and end_name
     method, err := getMethodPath(svcName, endName)
     if err != nil {
         return
     }
 
-    // get request obj (of type proto.Message)
     req := getVarByTypeName(endName + "Request")
     if req == nil {
         return "", fmt.Errorf("Failed to get request object")
     }
 
-    // get response obj (of type proto.Message)
     reply := getVarByTypeName(endName + "Response")
     if reply == nil {
         return "", fmt.Errorf("Failed to get response object")
     }
 
-    if err = jsonpb.UnmarshalString(rawRequest, req); err != nil {
+    if err = jsonpb.UnmarshalString(data, req); err != nil {
         return
     }
 
-    if err = conn.Invoke(context.Background(), method, req, reply,
-        grpc.EmptyCallOption{}); err != nil {
+    if err = conn.Invoke(context.Background(), method, req, reply); err != nil {
         return
     }
     return reply.String(), nil
 }
 
+func MassiveCallEndpoint(endpointName, hosts, data string, rate uint64, durationString string) (err error) {
+    duration, err := time.ParseDuration(durationString)
+    if err != nil {
+        return
+    }
+
+    svcName, endName := parseEndpointName(endpointName)
+
+    method, err := getMethodPath(svcName, endName)
+    if err != nil {
+        return
+    }
+
+    req := getVarByTypeName(endName + "Request")
+    if req == nil {
+        return fmt.Errorf("Failed to get request object")
+    }
+
+    reply := getVarByTypeName(endName + "Response")
+    if reply == nil {
+        return fmt.Errorf("Failed to get response object")
+    }
+
+    if err = jsonpb.UnmarshalString(data, req); err != nil {
+        return
+    }
+
+    hosts = strings.Trim(hosts, " ,")
+    hostList := strings.Split(hosts, ",")
+
+    target := &trunks.Gtarget{
+        MethodName: method,
+        Request:    req,
+        Response:   reply,
+    }
+
+    burner, err := trunks.NewBurner(hostList)
+    if err != nil {
+        return
+    }
+    defer burner.Close()
+
+    var metrics trunks.Metrics
+    startT := time.Now()
+    for res := range burner.Burn(target, rate, duration) {
+        metrics.Add(res)
+    }
+    dur := time.Since(startT)
+    metrics.Close()
+
+    fmt.Printf("Duration: %v\n", dur.Seconds())
+    fmt.Printf("Total Requests: %d\n", metrics.Requests)
+    fmt.Printf("Mean: %s\n", metrics.Latencies.Mean)
+    fmt.Printf("50th: %s\n", metrics.Latencies.P50)
+    fmt.Printf("95th: %s\n", metrics.Latencies.P95)
+    fmt.Printf("99th: %s\n", metrics.Latencies.P99)
+    fmt.Printf("Max: %s\n", metrics.Latencies.Max)
+    return
+}
+
+// get accurate method path by parsing pb source
+// with svc_name and end_name
 func getMethodPath(svcName, endName string) (res string, err error) {
     qCandidates := _les.Query().ByKind(lesphina.KindFunction).ByName(endName).All()
     if len(qCandidates) < 1 {
