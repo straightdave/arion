@@ -19,6 +19,7 @@ import (
     "time"
 
     "github.com/golang/protobuf/jsonpb"
+    "github.com/golang/protobuf/proto"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
 
@@ -410,7 +411,7 @@ func MassiveCallEndpoint(endpointName, hosts, data string, rate uint64, duration
 
     target := &trunks.Gtarget{
         MethodName: method,
-        Request:    req,
+        Requests:   []proto.Message{req},
         Response:   reply,
     }
 
