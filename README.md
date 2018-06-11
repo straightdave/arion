@@ -5,10 +5,11 @@ Arion
 Arion is a gRPC tool to:
 - get endpoints definition
 - debug endpoints
+- do the performance test agains endpoints
 
 ## Get Arion
 ```bash
-> go get github.com/straightdave/arion
+> go get -u github.com/straightdave/arion
 ```
 
 ## Use Arion to generate PostGal
@@ -37,20 +38,31 @@ When using Arion, your machine should have internet access since Arion will `go 
 
 ### Console Mode
 In console mode, PostGal can list simple endpoints of gRPC services defined in your pb.go file.
-You can use `-list` simply to see whether your PostGal is ok or not:
+You can use `-l` simply to see whether your PostGal is ok or not:
 ```bash
-$ ./postgal -list
-MyappClient
+$ ./postgal -l
+Myapp
 > Hello
 ```
 
 Also you can call endpoints in console mode:
 ```bash
-$ ./postgal -call Hello -req '{"Name": "Dave"}'
+$ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
+
+To execute an performance test:
+```bash
+$ ./postgal -e Hello -d '{"Name": "Dave"}' -x -rate 10 -duration 10s
+Massive Call...
+... (report)
+```
+
+> Use `-h` to see the detailed usage
+
+
 ### Broswer Mode
-Browser mode is recommended way to use PostGal.
+Browser mode is recommended way to use PostGal. You can use is just like Postman.
 
 ```bash
 $ ./postgal -serve
@@ -63,6 +75,7 @@ In the PostGal web page, you can easily:
 3. change endpoint locations (gRPC server, IP:port)
 
 You can use this page to play with gRPC services as you do the similar thing against HTTP with Postman.
+
 
 ## Development
 
