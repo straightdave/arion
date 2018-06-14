@@ -8,7 +8,7 @@
     <div class="topbar">
         <div class="topbar-title">&copy; PostGal v{{- .ArionVersion -}}</div>
         <div class="topbar-controls">
-            <input type="text" id="in-hostaddress" placeholder="server address" value="0.0.0.0:8087" />
+            <input type="text" id="in-hostaddress" placeholder="server address" value="{{- .TargetHost -}}" />
         </div>
         <input type="hidden" id="arion-port" value="{{- .ArionPort -}}" />
     </div>
