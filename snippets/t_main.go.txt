@@ -36,13 +36,14 @@ var (
     _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
 
     // flags
-    _debug     = flag.Bool("debug", false, "show debug info (for dev purpose)")
+    _ver       = flag.Bool("v", false, "print version info")
+    _debug     = flag.Bool("debug", false, "print some debug info (for dev purpose)")
     _serve     = flag.Bool("serve", false, "use PostGal in browser mode")
     _arionHost = flag.String("at", ":9999", "address to host PostGal in browser mode")
     _info      = flag.Bool("i", false, "show info")
     _type      = flag.String("t", "", "data type name")
     _hosts     = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
-    _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+    _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute or query")
     _massive   = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
     _data      = flag.String("d", "", "request data")
     _dataFile  = flag.String("df", "", "request data file\nData in the file will be read line by line")
@@ -51,9 +52,7 @@ var (
     _rate      = flag.Uint64("rate", 1, "execution frequency per second")
 )
 
-const (
-    Ver = "0.1.0"
-)
+var _version string
 
 func init() {
     flag.Parse()
@@ -68,7 +67,11 @@ func main() {
         return
     }
 
-    // browser mode
+    if *_ver {
+        fmt.Println("Postgal", _version)
+        return
+    }
+
     if *_serve {
         realHtml := genHtml(gozip.DecompressString(html2))
         serveStaticContent("/", "text/html", realHtml)
@@ -117,25 +120,46 @@ func prepHostList() {
     }
 }
 
-func genAndPrintEndpointInfo(endName string) {
-    fmt.Println("Not implemented yet :)")
+func genAndPrintEndpointInfo(raw string) {
+    svcName, endName := parseEndpointName(raw)
+    for _, svc := range _metaData.Services {
+        if svcName != "" && svc.Name != svcName {
+            continue
+        }
+
+        for _, end := range svc.Endpoints {
+            if end.Name == endName {
+                fmt.Printf("%s#%s\n", svc.Name, end.Name)
+                fmt.Println("- Request entity:")
+                for _, req := range end.ReqElements {
+                    fmt.Printf("--- %s %s (json field name: %s)\n", req.Name, req.Type, req.JsonFieldName)
+                }
+                fmt.Println("- Response entity:")
+                for _, res := range end.RespElements {
+                    fmt.Printf("--- %s %s (json field name: %s)\n", res.Name, res.Type, res.JsonFieldName)
+                }
+                break
+            }
+        }
+    }
 }
 
 func genAndPrintTypeInfo(typeName string) {
-    fmt.Println("Not implemented yet :)")
+    for _, t := range _metaData.Reference {
+        if t.Name == typeName {
+            for _, f := range t.Fields {
+                fmt.Printf("- %s %s (json field name: %s)\n", f.Name, f.Type, f.JsonFieldName)
+            }
+            break
+        }
+    }
 }
 
 func genAndPrintOverallInfo() {
-    q := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
-    for _, intr := range q {
-        svc, ok := intr.(*lesphina.Interface)
-        if !ok {
-            fmt.Printf("Obj [%+v] is not interface, weird\n", intr)
-            continue
-        }
-        fmt.Println(strings.TrimRight(svc.GetName(), "Client"))
-        for _, m := range svc.Methods {
-            fmt.Printf("> %s\n", m.GetName())
+    for _, svc := range _metaData.Services {
+        fmt.Println(svc.Name)
+        for _, e := range svc.Endpoints {
+            fmt.Printf("> %s\n", e.Name)
         }
     }
 }
@@ -191,7 +215,7 @@ type ElementData struct {
 
 func genMetaData() {
     _metaData = &MetaData{
-        ArionVersion: Ver,
+        ArionVersion: _version,
         TargetHost:   getFullHost(_hostList[0]),
         ArionPort:    getPort(*_arionHost),
     }

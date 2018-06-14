@@ -39,30 +39,31 @@ When using Arion, your machine should have internet access since Arion will `go 
 Usage:
 ```
   -at string
-        address to host PostGal in browser mode (default ":9999")
+      address to host PostGal in browser mode (default ":9999")
   -d string
-        request data
+      request data
   -debug
-        show debug info (for dev purpose)
+      print some debug info (for dev purpose)
   -df string
-        request data file
-        Data in the file will be read line by line
+      request data file
+      Data in the file will be read line by line
   -duration duration
-        execution duration like 10s, 20m (default 10s)
+      execution duration like 10s, 20m (default 10s)
   -e string
-        endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
+      endpoint name (<svc_name>#<end_name> or just <end_name>) to execute or query
   -h string
-        hosts of target service (commas to seperate multiple hosts) (default ":8087")
-  -i    show info
+      hosts of target service (commas to seperate multiple hosts) (default ":8087")
+  -i  show info
   -loop
-        repeat all requests in loops
+      repeat all requests in loops
   -rate uint
-        execution frequency per second (default 1)
+      execution frequency per second (default 1)
   -serve
-        use PostGal in browser mode
+      use PostGal in browser mode
   -t string
-        data type name
-  -x    massive call endpoint (needs -rate and -duration)
+      data type name
+  -v  print version info
+  -x  massive call endpoint (needs -rate and -duration)
 ```
 
 ### Console Mode
@@ -74,13 +75,31 @@ Myapp
 > Hello
 ```
 
-Also you can call endpoints in console mode:
+To see some details about one endpoint:
+```bash
+$ ./postgal -i -e Hello
+Myapp#Hello
+- Request entity:
+--- Name string (json field name: Name)
+- Response entity:
+--- Message string (json field name: Message)
+```
+
+To see some details about one entiry structure:
+```bash
+$ ./postgal -i -t HelloRequest
+- Name string (json field name: Name)
+```
+
+Also you can call one endpoint:
 ```bash
 $ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
 
-To execute an performance test:
+>You can create a JSON as request data based on knowledge you get using `-i -t` or `-i -e`
+
+To execute an performance test against one endpoint:
 ```bash
 $ ./postgal -e Hello -d '{"Name": "Dave"}' -x -rate 10 -duration 10s
 Massive Call...

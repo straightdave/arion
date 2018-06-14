@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/fatih/color"
 	gozip "github.com/straightdave/gozip/lib"
@@ -131,11 +132,13 @@ func genMetaFile(pbFile, dirName, fileName string) error {
 	defer tf.Close()
 
 	return tpl.Execute(tf, struct {
-		LesDump string
-		List    []string
+		GeneratedTime string
+		LesDump       string
+		List          []string
 	}{
-		LesDump: lesDump,
-		List:    lesTypeList,
+		GeneratedTime: time.Now().Format(time.UnixDate),
+		LesDump:       lesDump,
+		List:          lesTypeList,
 	})
 }
 
