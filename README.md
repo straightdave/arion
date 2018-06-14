@@ -36,11 +36,40 @@ When using Arion, your machine should have internet access since Arion will `go 
 
 ## Use PostGal
 
+Usage:
+```
+  -at string
+        address to host PostGal in browser mode (default ":9999")
+  -d string
+        request data
+  -debug
+        show debug info (for dev purpose)
+  -df string
+        request data file
+        Data in the file will be read line by line
+  -duration duration
+        execution duration like 10s, 20m (default 10s)
+  -e string
+        endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
+  -h string
+        hosts of target service (commas to seperate multiple hosts) (default ":8087")
+  -i    show info
+  -loop
+        repeat all requests in loops
+  -rate uint
+        execution frequency per second (default 1)
+  -serve
+        use PostGal in browser mode
+  -t string
+        data type name
+  -x    massive call endpoint (needs -rate and -duration)
+```
+
 ### Console Mode
 In console mode, PostGal can list simple endpoints of gRPC services defined in your pb.go file.
-You can use `-l` simply to see whether your PostGal is ok or not:
+You can use `-i` simply to see whether your PostGal is ok or not:
 ```bash
-$ ./postgal -l
+$ ./postgal -i
 Myapp
 > Hello
 ```
@@ -58,8 +87,12 @@ Massive Call...
 ... (report)
 ```
 
-> Use `-h` to see the detailed usage
+You can use `-df` to specify a data file which consists of multiple request data to conduct the massive call:
+```bash
+$ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 10s
+```
 
+>If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
 
 ### Broswer Mode
 Browser mode is recommended way to use PostGal. You can use is just like Postman.
