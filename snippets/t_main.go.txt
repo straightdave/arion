@@ -30,6 +30,7 @@ import (
 
 var (
     _les             *lesphina.Lesphina
+    _metaData        *MetaData
     _hostList        []string
     _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
     _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
@@ -51,18 +52,14 @@ var (
 )
 
 const (
-    Ver      = "0.1.0"
-    MimeHtml = "text/html"
-    MimeCss  = "text/css"
-    MimeJs   = "text/javascript"
-    MimeJson = "application/json"
-    // default arion serving port (only used in browser mode)
-    _defaultPort = "9999"
+    Ver = "0.1.0"
 )
 
 func init() {
     flag.Parse()
     _les = lesphina.Restore(_lesDump)
+    prepHostList()
+    genMetaData()
 }
 
 func main() {
@@ -71,14 +68,12 @@ func main() {
         return
     }
 
-    prepHostList()
-
     // browser mode
     if *_serve {
         realHtml := genHtml(gozip.DecompressString(html2))
-        serveStaticContent("/", MimeHtml, realHtml)
-        serveStaticContent("/m.css", MimeCss, gozip.DecompressString(css))
-        serveStaticContent("/m.js", MimeJs, gozip.DecompressString(js))
+        serveStaticContent("/", "text/html", realHtml)
+        serveStaticContent("/m.css", "text/css", gozip.DecompressString(css))
+        serveStaticContent("/m.js", "text/javascript", gozip.DecompressString(js))
         http.HandleFunc("/type", handleGetType)
         http.HandleFunc("/meta", handleGetMeta)
         http.HandleFunc("/call", handleCallEndpoint)
@@ -135,7 +130,7 @@ func genAndPrintOverallInfo() {
     for _, intr := range q {
         svc, ok := intr.(*lesphina.Interface)
         if !ok {
-            log.Printf("Obj [%+v] is not interface, weird\n", intr)
+            fmt.Printf("Obj [%+v] is not interface, weird\n", intr)
             continue
         }
         fmt.Println(strings.TrimRight(svc.GetName(), "Client"))
@@ -161,10 +156,10 @@ func getPort(rawAddress string) string {
             return last
         }
     }
-    return _defaultPort
+    return "9999"
 }
 
-type HtmlData struct {
+type MetaData struct {
     ArionVersion string
     ArionPort    string
     TargetHost   string
@@ -194,8 +189,8 @@ type ElementData struct {
     JsonFieldName string
 }
 
-func genHtmlData() HtmlData {
-    res := HtmlData{
+func genMetaData() {
+    _metaData = &MetaData{
         ArionVersion: Ver,
         TargetHost:   getFullHost(_hostList[0]),
         ArionPort:    getPort(*_arionHost),
@@ -205,7 +200,7 @@ func genHtmlData() HtmlData {
     for _, intf := range rawInterfaces {
         svc, ok := intf.(*lesphina.Interface)
         if !ok {
-            log.Println("the obj found is not interface, weird")
+            fmt.Println("the obj found is not interface, weird")
             continue
         }
 
@@ -249,14 +244,14 @@ func genHtmlData() HtmlData {
 
             svcData.Endpoints = append(svcData.Endpoints, endData)
         }
-        res.Services = append(res.Services, svcData)
+        _metaData.Services = append(_metaData.Services, svcData)
     }
 
     rawAllStructs := _les.Query().ByKind(lesphina.KindStruct).All()
     for _, stru := range rawAllStructs {
         s, ok := stru.(*lesphina.Struct)
         if !ok {
-            log.Println("the obj found is not Struct, weird")
+            fmt.Println("the obj found is not Struct, weird")
             continue
         }
 
@@ -271,9 +266,8 @@ func genHtmlData() HtmlData {
                 JsonFieldName: f.JsonFieldName(),
             })
         }
-        res.Reference = append(res.Reference, structData)
+        _metaData.Reference = append(_metaData.Reference, structData)
     }
-    return res
 }
 
 func genHtml(raw string) string {
@@ -283,7 +277,7 @@ func genHtml(raw string) string {
     }
 
     var buf bytes.Buffer
-    if err := t.Execute(&buf, genHtmlData()); err != nil {
+    if err := t.Execute(&buf, _metaData); err != nil {
         panic(err)
     }
     return buf.String()
@@ -381,7 +375,8 @@ func parseEndpointName(rawName string) (string, string) {
 
 // used in both console and browser modes
 func callEndpoint(data string) (res string, err error) {
-    conn, err := grpc.Dial(_hostList[0], grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
+    conn, err := grpc.Dial(_hostList[0], grpc.WithInsecure(),
+        grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
     if err != nil {
         return
     }
