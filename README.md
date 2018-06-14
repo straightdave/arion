@@ -85,7 +85,7 @@ Myapp#Hello
 --- Message string (json field name: Message)
 ```
 
-To see some details about one entiry structure:
+To see some details about one entity structure:
 ```bash
 $ ./postgal -i -t HelloRequest
 - Name string (json field name: Name)
