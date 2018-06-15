@@ -43,7 +43,7 @@ var (
     _info      = flag.Bool("i", false, "show info")
     _type      = flag.String("t", "", "data type name")
     _hosts     = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
-    _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute or query")
+    _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
     _massive   = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
     _data      = flag.String("d", "", "request data")
     _dataFile  = flag.String("df", "", "request data file\nData in the file will be read line by line")
@@ -102,7 +102,7 @@ func main() {
             massiveCallEndpoint()
             return
         }
-        res, err := callEndpoint(*_data)
+        res, err := callEndpoint(_hostList[0], *_endpoint, *_data)
         if err != nil {
             fmt.Println("ERROR", err)
             return
@@ -367,7 +367,7 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 
     hostAddr := v.Get("h")
     if hostAddr == "" {
-        http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
+        http.Error(w, "lacking of query keyword (h)", http.StatusBadRequest)
         return
     }
 
@@ -377,8 +377,11 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    res, err := callEndpoint(string(body))
+    data := string(body)
+    log.Printf("Call %s on %s with data:\n%s\n", endpointName, hostAddr, data)
+    res, err := callEndpoint(hostAddr, endpointName, data)
     if err != nil {
+        log.Println("Err:", err.Error())
         io.WriteString(w, err.Error())
         return
     }
@@ -398,15 +401,15 @@ func parseEndpointName(rawName string) (string, string) {
 }
 
 // used in both console and browser modes
-func callEndpoint(data string) (res string, err error) {
-    conn, err := grpc.Dial(_hostList[0], grpc.WithInsecure(),
+func callEndpoint(host, endpoint, data string) (res string, err error) {
+    conn, err := grpc.Dial(host, grpc.WithInsecure(),
         grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
     if err != nil {
         return
     }
     defer conn.Close()
 
-    svcName, endName := parseEndpointName(*_endpoint)
+    svcName, endName := parseEndpointName(endpoint)
     method, err := getMethodPath(svcName, endName)
     if err != nil {
         return
