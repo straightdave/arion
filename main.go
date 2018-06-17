@@ -21,8 +21,10 @@ import (
 )
 
 var (
-	sourceFile       = flag.String("src", "", "source pb.go file")
-	outFile          = flag.String("out", "postgal", "output executable binary file")
+	sourceFile = flag.String("src", "", "source pb.go file")
+	outFile    = flag.String("out", "postgal", "output executable binary file")
+	gogetU     = flag.Bool("u", false, "update dependencies when building Postgal")
+
 	regexPackageLine = regexp.MustCompile(`package (.+)`)
 )
 
@@ -65,7 +67,7 @@ func main() {
 	}
 
 	// compile all
-	err = compileDir(tmpDir, *outFile)
+	err = compileDir(tmpDir, *outFile, *gogetU)
 	if err != nil {
 		log.Fatalln("failed to compile:", err.Error())
 	}
@@ -162,7 +164,7 @@ func restoreFile(raw, dirName, fileName string) error {
 	return newSourceFile(gozip.DecompressString(raw), dirName, fileName)
 }
 
-func compileDir(dirName, binFileName string) error {
+func compileDir(dirName, binFileName string, usingUpdate bool) error {
 	if !path.IsAbs(dirName) {
 		dirName = "./" + dirName
 	}
@@ -198,8 +200,13 @@ func compileDir(dirName, binFileName string) error {
 	}()
 
 	// run go get ./... first
-	log.Println("install all dependencies...")
-	_ = exec.Command("go", "get", "./...").Run() // ignore exit error
+	if usingUpdate {
+		log.Println("force-update all dependencies...")
+		_ = exec.Command("go", "get", "-u", "./...").Run() // ignore exit error
+	} else {
+		log.Println("get/check all dependencies...")
+		_ = exec.Command("go", "get", "./...").Run() // ignore exit error
+	}
 
 	// build
 	var opts []string
