@@ -202,7 +202,7 @@ func compileDir(dirName, binFileName string, usingUpdate bool) error {
 	// run go get ./... first
 	if usingUpdate {
 		log.Println("force-update all dependencies...")
-		_ = exec.Command("go", "get", "-u", "./...").Run() // ignore exit error
+		_ = exec.Command("go", "get", "-f", "-u", "./...").Run() // ignore exit error
 	} else {
 		log.Println("get/check all dependencies...")
 		_ = exec.Command("go", "get", "./...").Run() // ignore exit error

@@ -14,7 +14,7 @@ Arion is a gRPC tool to:
 
 ## Use Arion to generate PostGal
 ```bash
-$ ./arion -src <your.any.pb.go>
+$ ./arion -src <your.any.pb.go> -u
 2018/05/24 22:52:46 generating new pb file: temp342770882/pb.go
 2018/05/24 22:52:46 generating meta source file: temp342770882/meta.go
 2018/05/24 22:52:46 creating new source file: temp342770882/main.go
@@ -24,6 +24,8 @@ $ ./arion -src <your.any.pb.go>
 2018/05/24 22:52:49 change dir back to ...
 2018/05/24 22:52:49 SUCCESS
 ```
+
+> Using `-u` to force-update local dependencies. It's sometimes required if some underlying packages are not up-to-date.
 
 Then Arion will generate a temporary folder containing source files and compile those files into a
 executable binary called *PostGal*.
@@ -113,7 +115,7 @@ $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 10s
 
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
 
-### Broswer Mode
+### Browser Mode
 Browser mode is recommended way to use PostGal. You can use is just like Postman.
 
 ```bash
