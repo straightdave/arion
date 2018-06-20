@@ -26,17 +26,20 @@ var (
 	fSourceFile  = flag.String("src", "", "source pb.go file")
 	fOutputFile  = flag.String("o", "postgal", "output executable binary file")
 	fGoGetUpdate = flag.Bool("u", false, "update dependencies when building Postgal")
+	fListPostgal = flag.Bool("l", false, "list postgals in current folder or temp* folders")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
-)
-
-const (
-	cConfigFile = ".arion"
 )
 
 func main() {
 	flag.Parse()
 	green := color.New(color.FgGreen).SprintfFunc()
+
+	// list postgals
+	if *fListPostgal {
+		listPostgal()
+		return
+	}
 
 	if *fSourceFile == "" {
 		log.Fatalln("sourceFile cannot be blank")
@@ -78,6 +81,42 @@ func main() {
 		log.Fatalln("failed to compile:", err.Error())
 	}
 	log.Println(green("SUCCESS"))
+}
+
+func listPostgal() {
+	cDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalln("failed to get working dir:", err.Error())
+	}
+
+	files, err := ioutil.ReadDir(cDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasPrefix(file.Name(), "postgal") {
+			printPostgalInfo(file)
+			continue
+		}
+
+		if file.IsDir() && strings.HasPrefix(file.Name(), "temp") {
+			fs, e := ioutil.ReadDir(file.Name())
+			if e != nil {
+				continue
+			}
+
+			for _, f := range fs {
+				if !f.IsDir() && strings.HasPrefix(f.Name(), "postgal") {
+					printPostgalInfo(f)
+				}
+			}
+		}
+	}
+}
+
+func printPostgalInfo(file os.FileInfo) {
+	fmt.Println(file.Name(), file.ModTime())
 }
 
 func genTempPbFile(sourceFile, dirName, fileName string) error {
