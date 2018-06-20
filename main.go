@@ -21,18 +21,22 @@ import (
 )
 
 var (
-	sourceFile = flag.String("src", "", "source pb.go file")
-	outFile    = flag.String("out", "postgal", "output executable binary file")
-	gogetU     = flag.Bool("u", false, "update dependencies when building Postgal")
+	fSourceFile  = flag.String("src", "", "source pb.go file")
+	fOutputFile  = flag.String("out", "postgal", "output executable binary file")
+	fGoGetUpdate = flag.Bool("u", false, "update dependencies when building Postgal")
 
-	regexPackageLine = regexp.MustCompile(`package (.+)`)
+	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
+)
+
+const (
+	cConfigFile = ".arion"
 )
 
 func main() {
 	flag.Parse()
 	green := color.New(color.FgGreen).SprintfFunc()
 
-	if *sourceFile == "" {
+	if *fSourceFile == "" {
 		log.Fatalln("sourceFile cannot be blank")
 	}
 
@@ -43,13 +47,13 @@ func main() {
 	}
 
 	// modify package name of the pb.go file
-	err = genTempPbFile(*sourceFile, tmpDir, "pb")
+	err = genTempPbFile(*fSourceFile, tmpDir, "pb")
 	if err != nil {
 		log.Fatalln("failed to gen new pb:", err.Error())
 	}
 
 	// generate source code of meta info used by Lesphina
-	err = genMetaFile(*sourceFile, tmpDir, "meta")
+	err = genMetaFile(*fSourceFile, tmpDir, "meta")
 	if err != nil {
 		log.Fatalln("failed to gen meta:", err.Error())
 	}
@@ -67,7 +71,7 @@ func main() {
 	}
 
 	// compile all
-	err = compileDir(tmpDir, *outFile, *gogetU)
+	err = compileDir(tmpDir, *fOutputFile, *fGoGetUpdate)
 	if err != nil {
 		log.Fatalln("failed to compile:", err.Error())
 	}
@@ -97,7 +101,7 @@ func genTempPbFile(sourceFile, dirName, fileName string) error {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !hasChanged && regexPackageLine.MatchString(line) {
+		if !hasChanged && vRegexPackageLine.MatchString(line) {
 			line = "package main"
 			hasChanged = true // change only once
 		}
