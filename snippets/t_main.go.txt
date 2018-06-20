@@ -52,7 +52,7 @@ var (
     _rate      = flag.Uint64("rate", 1, "execution frequency per second")
 )
 
-var _version string
+var _version, _checksum string
 
 func init() {
     flag.Parse()
@@ -68,7 +68,13 @@ func main() {
     }
 
     if *_ver {
-        fmt.Println("Postgal", _version)
+        var svcNames []string
+        for _, svc := range _metaData.Services {
+            svcNames = append(svcNames, svc.Name)
+        }
+        fmt.Printf("Service:\t%s\n", strings.Join(svcNames, ", "))
+        fmt.Printf("Generated:\t%s\n", _version)
+        fmt.Printf("Checksum:\t%s\n", _checksum)
         return
     }
 

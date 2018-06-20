@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -22,7 +24,7 @@ import (
 
 var (
 	fSourceFile  = flag.String("src", "", "source pb.go file")
-	fOutputFile  = flag.String("out", "postgal", "output executable binary file")
+	fOutputFile  = flag.String("o", "postgal", "output executable binary file")
 	fGoGetUpdate = flag.Bool("u", false, "update dependencies when building Postgal")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
@@ -110,7 +112,28 @@ func genTempPbFile(sourceFile, dirName, fileName string) error {
 	return writer.Flush()
 }
 
+func getFileMD5(fileName string) (checksum string, err error) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	h := md5.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return
+	}
+	checksum = fmt.Sprintf("%x", h.Sum(nil))
+	return
+}
+
 func genMetaFile(pbFile, dirName, fileName string) error {
+	checksum, err := getFileMD5(pbFile)
+	if err != nil {
+		return err
+	}
+
 	fullName := filepath.Join(dirName, fileName)
 	fullName = strings.TrimRight(fullName, ".go") + ".go"
 	log.Println("generating meta source file:", fullName)
@@ -139,10 +162,12 @@ func genMetaFile(pbFile, dirName, fileName string) error {
 
 	return tpl.Execute(tf, struct {
 		GeneratedTime string
+		Checksum      string
 		LesDump       string
 		List          []string
 	}{
 		GeneratedTime: time.Now().Format(time.UnixDate),
+		Checksum:      checksum,
 		LesDump:       lesDump,
 		List:          lesTypeList,
 	})
@@ -168,7 +193,7 @@ func restoreFile(raw, dirName, fileName string) error {
 	return newSourceFile(gozip.DecompressString(raw), dirName, fileName)
 }
 
-func compileDir(dirName, binFileName string, usingUpdate bool) error {
+func compileDir(dirName, binOutputName string, usingUpdate bool) error {
 	if !path.IsAbs(dirName) {
 		dirName = "./" + dirName
 	}
@@ -214,7 +239,7 @@ func compileDir(dirName, binFileName string, usingUpdate bool) error {
 
 	// build
 	var opts []string
-	opts = append(opts, "build", "-v", "-o", binFileName)
+	opts = append(opts, "build", "-v", "-o", binOutputName)
 	err = exec.Command("go", opts...).Run()
 	if err != nil {
 		log.Println("failed to compile:", err.Error())
