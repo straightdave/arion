@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	fSourceFile  = flag.String("src", "", "source pb.go file")
-	fOutputFile  = flag.String("o", "postgal", "output executable binary file")
-	fGoGetUpdate = flag.Bool("u", false, "update dependencies when building Postgal")
-	fListPostgal = flag.Bool("l", false, "list postgals in current folder or temp* folders")
+	fSourceFile     = flag.String("src", "", "source pb.go file")
+	fOutputFile     = flag.String("o", "", "output executable binary file")
+	fClearTempFiles = flag.Bool("c", false, "to clear temp folder after Postgal is generated\n*NOTE*: use -o to generate Postgal out of temp folder")
+	fGoGetUpdate    = flag.Bool("u", false, "update dependencies when building Postgal")
+	fListPostgal    = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
 )
@@ -49,6 +50,14 @@ func main() {
 	tmpDir, err := ioutil.TempDir(".", "temp")
 	if err != nil {
 		log.Fatalln("cannot create temp dir:", err.Error())
+	}
+	if *fClearTempFiles {
+		defer func(dirName string) {
+			log.Printf("clear temp folder %s\n", dirName)
+			if err := os.RemoveAll(dirName); err != nil {
+				log.Fatalln(err)
+			}
+		}(tmpDir)
 	}
 
 	// modify package name of the pb.go file
@@ -96,7 +105,7 @@ func listPostgal() {
 
 	for _, file := range files {
 		if !file.IsDir() && strings.HasPrefix(file.Name(), "postgal") {
-			printPostgalInfo(file)
+			printPostgalInfo(file, ".")
 			continue
 		}
 
@@ -108,15 +117,20 @@ func listPostgal() {
 
 			for _, f := range fs {
 				if !f.IsDir() && strings.HasPrefix(f.Name(), "postgal") {
-					printPostgalInfo(f)
+					printPostgalInfo(f, file.Name())
 				}
 			}
 		}
 	}
 }
 
-func printPostgalInfo(file os.FileInfo) {
-	fmt.Println(file.Name(), file.ModTime())
+func printPostgalInfo(file os.FileInfo, folder string) {
+	fullName := fmt.Sprintf("%s/%s", folder, file.Name())
+	fmt.Println("[-]", fullName)
+	out, err := exec.Command(fullName, "-v").Output()
+	if err == nil {
+		fmt.Println(string(out))
+	}
 }
 
 func genTempPbFile(sourceFile, dirName, fileName string) error {
@@ -233,21 +247,28 @@ func restoreFile(raw, dirName, fileName string) error {
 }
 
 func compileDir(dirName, binOutputName string, usingUpdate bool) error {
-	if !path.IsAbs(dirName) {
-		dirName = "./" + dirName
-	}
-
 	_, err := exec.LookPath("go")
 	if err != nil {
 		log.Println("no go installed")
 		return err
 	}
 
-	// get current dir
 	cDir, err := os.Getwd()
 	if err != nil {
 		log.Println("failed to get working dir:", err.Error())
 		return err
+	}
+
+	if !path.IsAbs(dirName) {
+		dirName = path.Join(cDir, dirName)
+	}
+
+	if binOutputName != "" {
+		if !path.IsAbs(binOutputName) {
+			binOutputName = path.Join(cDir, binOutputName)
+		}
+	} else {
+		binOutputName = "postgal"
 	}
 
 	// change dir

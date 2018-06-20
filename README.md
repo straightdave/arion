@@ -9,7 +9,21 @@ Arion is a gRPC tool to:
 
 ## Get Arion
 ```bash
-> go get -u github.com/straightdave/arion
+$ go get -u github.com/straightdave/arion
+```
+
+## Usage of Arion
+```bash
+$ ./arion -h
+Usage of ./arion:
+  -c  to clear temp folder after Postgal is generated
+      *NOTE*: use -o to generate Postgal out of temp folder
+  -l  list Postgals in current folder or all ./temp* folders
+  -o string
+      output executable binary file (default "postgal")
+  -src string
+      source pb.go file
+  -u  update dependencies when building Postgal
 ```
 
 ## Use Arion to generate PostGal
@@ -25,16 +39,40 @@ $ ./arion -src <your.any.pb.go> -u
 2018/05/24 22:52:49 SUCCESS
 ```
 
-> Using `-u` to force-update local dependencies. It's sometimes required if some underlying packages are not up-to-date.
+> Using `-u` to force-update local dependencies. It's required to use once if some underlying packages are not up-to-date.
 
-Then Arion will generate a temporary folder containing source files and compile those files into a
-executable binary called *PostGal*.
+Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called *Postgal*. You can use `-o` to specify other path/name for this executable file. Also you can use `-c` to clear temp folder after *Postgal* is generated.
+
+## List *Postgals*
+```bash
+$ ./arion -l
+[-] ./postgal-xxx
+Service:  Myapp
+Generated:  Wed Jun 20 23:40:59 CST 2018
+Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
+
+[-] temp080184789/postgal
+Service:  Myapp
+Generated:  Wed Jun 20 23:40:39 CST 2018
+Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
+
+[-] temp252099608/postgal
+Service:  Myapp
+Generated:  Wed Jun 20 23:40:51 CST 2018
+Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
+
+```
+> At the moment Arion looks for Postgals in current and all `./temp*` folders
 
 *NOTE*
 When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages including:
 * github.com/golang/protobuf/jsonpb
 * golang.org/x/net/context
 * google.golang.org/grpc
+Besides, some packages supporting code analyzing and performance testing:
+* github.com/straightdave/lesphina
+* github.com/straightdave/trunks
+>If you find strange panic when using Arion or Postgals, you can manually update those packages by `go get -u -f <package>` and re-generate Postgals to see if this can solve the problems or not.
 
 ## Use PostGal
 
@@ -116,7 +154,7 @@ $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 10s
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
 
 ### Browser Mode
-Browser mode is recommended way to use PostGal. You can use is just like Postman.
+Browser mode is the graphic way to use Postgals. You can use is just like Postman.
 
 ```bash
 $ ./postgal -serve
