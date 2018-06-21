@@ -5,6 +5,7 @@ package main
 
 import (
     "bytes"
+    "encoding/json"
     "flag"
     "fmt"
     "io"
@@ -440,7 +441,13 @@ func callEndpoint(host, endpoint, data string) (res string, err error) {
     if err = conn.Invoke(context.Background(), method, req, reply); err != nil {
         return
     }
-    return reply.String(), nil
+
+    jsonbytes, err := json.MarshalIndent(reply, "", "    ")
+    if err != nil {
+        return
+    }
+
+    return string(jsonbytes), nil
 }
 
 func massiveCallEndpoint() {
