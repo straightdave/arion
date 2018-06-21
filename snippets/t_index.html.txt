@@ -51,7 +51,7 @@
 
                     <div class="invoke-panel invisible" id="invokepanel{{- $endpoint.Name -}}">
                         <div class="end-input">
-                            <textarea id="invokebody{{- $endpoint.Name -}}"></textarea>
+                            <textarea id="invokebody{{- $endpoint.Name -}}" style="height:200px" onkeyup="textareaKeyup(event, this)"></textarea>
                         </div>
                         <div class="end-output" id="invokeresult{{- $endpoint.Name -}}"></div>
 

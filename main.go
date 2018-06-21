@@ -200,6 +200,10 @@ func genMetaFile(pbFile, dirName, fileName string) error {
 	var lesTypeList []string
 	allStructs := les.Query().ByKind(lesphina.KindStruct).All()
 	for _, s := range allStructs {
+		if strings.Title(s.GetName()) != s.GetName() {
+			// hide non-exporting structures
+			continue
+		}
 		lesTypeList = append(lesTypeList, s.GetName())
 	}
 

@@ -30,6 +30,18 @@ function callEndpoint(name, body) {
     })
 }
 
+function textareaKeyup(event, textarea) {
+    event.preventDefault()
+    if (event.keyCode === 13) {
+        // a new line, try to resize (height)
+        var lines = textarea.value.split('\n')
+        var h = 18*lines.length
+        if (h >= 200) {
+            textarea.style.height = h + "px"
+        }
+    }
+}
+
 function simpleAjaxCall(method, url, body, cbOK, cbErr) {
     var xhr = new XMLHttpRequest()
     xhr.open(method, url, true)

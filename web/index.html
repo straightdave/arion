@@ -18,7 +18,7 @@
         <div class="list">
             <ul>
                 <li class="end">
-                    <div class="end-title" onclick="toggleInvokePanel(this)">{{ $endpoint.Name }}</div>
+                    <div class="end-title" onclick="toggleInvokePanel(this)">abc</div>
                     <div class="end-desc">
                         <div class="end-desc-split">
                             <h3 class="eletitle"># {{ $endpoint.Name -}} Request</h3>
@@ -43,15 +43,15 @@
                         <div class="clear"></div>
                     </div>
 
-                    <div class="invoke-panel invisible" id="invokepanel{{- $endpoint.Name -}}">
+                    <div class="invoke-panel invisible" id="invokepanelabc">
                         <div class="end-input">
-                            <textarea id="invokebody{{- $endpoint.Name -}}"></textarea>
+                            <textarea id="invokebodyabc" style="height: 200px" onkeyup="textareaKeyup(event, this)"></textarea>
                         </div>
-                        <div class="end-output" id="invokeresult{{- $endpoint.Name -}}"></div>
+                        <div class="end-output" id="invokeresultabc"></div>
 
                         <div class="end-buttons">
-                            <button class="button" href="#" id="invokebutton{{- $endpoint.Name -}}" onclick="invokeCall(this)">Invoke</button>
-                            <button class="button" href="#" id="resetbutton{{- $endpoint.Name -}}" onclick="resetReqData(this)">Reset</button>
+                            <button class="button" href="#" id="invokebuttonabc" onclick="invokeCall(this)">Invoke</button>
+                            <button class="button" href="#" id="resetbuttonabc" onclick="resetReqData(this)">Reset</button>
                         </div>
                         <div class="clear"></div>
                     </div>

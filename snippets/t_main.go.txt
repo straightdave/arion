@@ -1,4 +1,4 @@
-// MasterClient
+// Postgal
 // auto-generated source code: main.go
 // by arion (https://github.com/straightdave/arion)
 package main
@@ -285,10 +285,12 @@ func genMetaData() {
             continue
         }
 
-        structData := Struct{
-            Name: s.Name,
+        // hide non-exporting structures
+        if strings.Title(s.Name) != s.Name {
+            continue
         }
 
+        structData := Struct{Name: s.Name}
         for _, f := range s.Fields {
             structData.Fields = append(structData.Fields, ElementData{
                 Name:          f.Name,
