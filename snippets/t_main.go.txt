@@ -468,6 +468,7 @@ func massiveCallEndpoint() {
     }
     defer burner.Close()
 
+    fmt.Println("Start at", time.Now().Format(time.UnixDate))
     var metrics trunks.Metrics
     startT := time.Now()
     for res := range burner.Burn(target, *_rate, *_duration) {
