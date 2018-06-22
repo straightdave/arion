@@ -238,7 +238,7 @@ func genMetaData() {
         }
 
         svcData := ServiceData{
-            Name: strings.TrimRight(svc.GetName(), "Client"),
+            Name: strings.TrimSuffix(svc.GetName(), "Client"),
         }
 
         // each endpoint
