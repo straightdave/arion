@@ -50,6 +50,7 @@ When using Arion, your machine should have internet access since Arion will `go 
 * github.com/golang/protobuf/jsonpb
 * golang.org/x/net/context
 * google.golang.org/grpc
+
 Besides, some packages supporting code analyzing and performance testing:
 * github.com/straightdave/lesphina
 * github.com/straightdave/trunks
