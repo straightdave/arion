@@ -34,7 +34,7 @@ $ ./arion -src <your.any.pb.go> -u
 2018/05/24 22:52:46 creating new source file: temp342770882/main.go
 2018/05/24 22:52:46 creating new source file: temp342770882/static.go
 2018/05/24 22:52:46 change dir to ./temp342770882
-2018/05/24 22:52:46 install all dependencies...
+2018/05/24 22:52:46 force-update all dependencies...
 2018/05/24 22:52:49 change dir back to ...
 2018/05/24 22:52:49 SUCCESS
 ```
@@ -42,8 +42,6 @@ $ ./arion -src <your.any.pb.go> -u
 > Using `-u` to force-update local dependencies. It's required to use once if some underlying packages are not up-to-date.
 
 Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called *Postgal*. You can use `-o` to specify other path/name for this executable file. Also you can use `-c` to clear temp folder after *Postgal* is generated.
-
-> At the moment Arion looks for Postgals in current and all `./temp*` folders
 
 *NOTE*
 When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages including:
@@ -75,6 +73,7 @@ Generated:  Wed Jun 20 23:40:51 CST 2018
 Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ```
+> At the moment Arion looks for Postgals in current and all `./temp*` folders
 
 ## Use PostGal
 
@@ -107,6 +106,8 @@ Usage:
   -t string
       data type name
   -v  print version info
+  -worker uint
+      workers (concurrent goroutines) (default 10)
   -x  massive call endpoint (needs -rate and -duration)
 ```
 
@@ -140,6 +141,8 @@ Also you can call one endpoint:
 $ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
+>You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
+
 
 Using `-json` to have JSON format output:
 ```bash
@@ -148,8 +151,6 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
     "Message": "Hello Dave"
 }
 ```
-
->You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 
 To execute an performance test against one endpoint:
 ```bash
@@ -164,6 +165,11 @@ $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 30s -loop
 ```
 
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
+
+To specify number of workers (maximun concurrent goroutines; default is 10) in performance testing:
+```bash
+$ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
+```
 
 ### Browser Mode
 Browser mode is the graphic way to use Postgals. You can use is just like Postman.
