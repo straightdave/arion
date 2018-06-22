@@ -52,6 +52,7 @@ var (
     _loop      = flag.Bool("loop", false, "repeat all requests in loops")
     _duration  = flag.Duration("duration", 10*time.Second, "execution duration like 10s, 20m")
     _rate      = flag.Uint64("rate", 1, "execution frequency per second")
+    _worker    = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
 )
 
 var _version, _checksum string
@@ -474,12 +475,14 @@ func massiveCallEndpoint() {
         return
     }
 
+    fmt.Println("Max workers:", *_worker)
+
     var burner *trunks.Burner
     var err error
     if *_loop {
-        burner, err = trunks.NewBurner(_hostList, trunks.WithLoop())
+        burner, err = trunks.NewBurner(_hostList, trunks.WithLoop(), trunks.NumWorker(*_worker))
     } else {
-        burner, err = trunks.NewBurner(_hostList)
+        burner, err = trunks.NewBurner(_hostList, trunks.NumWorker(*_worker))
     }
     if err != nil {
         panic(err)
