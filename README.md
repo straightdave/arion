@@ -43,6 +43,18 @@ $ ./arion -src <your.any.pb.go> -u
 
 Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called *Postgal*. You can use `-o` to specify other path/name for this executable file. Also you can use `-c` to clear temp folder after *Postgal* is generated.
 
+> At the moment Arion looks for Postgals in current and all `./temp*` folders
+
+*NOTE*
+When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages including:
+* github.com/golang/protobuf/jsonpb
+* golang.org/x/net/context
+* google.golang.org/grpc
+Besides, some packages supporting code analyzing and performance testing:
+* github.com/straightdave/lesphina
+* github.com/straightdave/trunks
+>If you find strange panic when using Arion or Postgals, you can manually update those packages by `go get -u -f <package>` and re-generate Postgals to see if this can solve the problems or not.
+
 ## List *Postgals*
 ```bash
 $ ./arion -l
@@ -62,23 +74,12 @@ Generated:  Wed Jun 20 23:40:51 CST 2018
 Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ```
-> At the moment Arion looks for Postgals in current and all `./temp*` folders
-
-*NOTE*
-When using Arion, your machine should have internet access since Arion will `go get` some official gRPC related packages including:
-* github.com/golang/protobuf/jsonpb
-* golang.org/x/net/context
-* google.golang.org/grpc
-Besides, some packages supporting code analyzing and performance testing:
-* github.com/straightdave/lesphina
-* github.com/straightdave/trunks
->If you find strange panic when using Arion or Postgals, you can manually update those packages by `go get -u -f <package>` and re-generate Postgals to see if this can solve the problems or not.
 
 ## Use PostGal
 
 Usage:
 ```
-  -at string
+-at string
       address to host PostGal in browser mode (default ":9999")
   -d string
       request data
@@ -90,10 +91,12 @@ Usage:
   -duration duration
       execution duration like 10s, 20m (default 10s)
   -e string
-      endpoint name (<svc_name>#<end_name> or just <end_name>) to execute or query
+      endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
   -h string
       hosts of target service (commas to seperate multiple hosts) (default ":8087")
   -i  show info
+  -json
+      response in JSON format
   -loop
       repeat all requests in loops
   -rate uint
@@ -137,7 +140,15 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
 
->You can create a JSON as request data based on knowledge you get using `-i -t` or `-i -e`
+Using `-json` to have JSON format output:
+```bash
+$ ./postgal -e Hello -d '{"Name": "Dave"}' -json
+{
+    "Message": "Hello Dave"
+}
+```
+
+>You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 
 To execute an performance test against one endpoint:
 ```bash
@@ -148,7 +159,7 @@ Massive Call...
 
 You can use `-df` to specify a data file which consists of multiple request data to conduct the massive call:
 ```bash
-$ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 10s
+$ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 30s -loop
 ```
 
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
