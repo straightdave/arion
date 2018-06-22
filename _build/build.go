@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
 	gozip "github.com/straightdave/gozip/lib"
 )
@@ -104,8 +103,7 @@ func generateMain2ForArion(dir string, data interface{}) {
 	}
 
 	// write to new main2
-	filename := fmt.Sprintf("main2.%d.go", time.Now().UTC().Unix()) // be careful: not very random
-	fullname := filepath.Join(dir, filename)
+	fullname := filepath.Join(dir, "main2.go")
 	if err := ioutil.WriteFile(fullname, buf.Bytes(), 0666); err != nil {
 		panic(err)
 	}
