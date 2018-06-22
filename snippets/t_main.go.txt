@@ -45,6 +45,7 @@ var (
     _type      = flag.String("t", "", "data type name")
     _hosts     = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
     _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+    _json      = flag.Bool("json", false, "response in JSON format")
     _massive   = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
     _data      = flag.String("d", "", "request data")
     _dataFile  = flag.String("df", "", "request data file\nData in the file will be read line by line")
@@ -109,7 +110,7 @@ func main() {
             massiveCallEndpoint()
             return
         }
-        res, err := callEndpoint(_hostList[0], *_endpoint, *_data)
+        res, err := callEndpoint(_hostList[0], *_endpoint, *_data, *_json)
         if err != nil {
             fmt.Println("ERROR", err)
             return
@@ -380,6 +381,12 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    var respInJson bool
+    respFormat := v.Get("format")
+    if strings.ToLower(respFormat) == "json" {
+        respInJson = true
+    }
+
     body, err := ioutil.ReadAll(r.Body)
     if err != nil {
         http.Error(w, "can't read body", http.StatusBadRequest)
@@ -388,7 +395,7 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 
     data := string(body)
     log.Printf("Call %s on %s with data:\n%s\n", endpointName, hostAddr, data)
-    res, err := callEndpoint(hostAddr, endpointName, data)
+    res, err := callEndpoint(hostAddr, endpointName, data, respInJson)
     if err != nil {
         log.Println("Err:", err.Error())
         io.WriteString(w, err.Error())
@@ -410,7 +417,7 @@ func parseEndpointName(rawName string) (string, string) {
 }
 
 // used in both console and browser modes
-func callEndpoint(host, endpoint, data string) (res string, err error) {
+func callEndpoint(host, endpoint, data string, respInJson bool) (res string, err error) {
     conn, err := grpc.Dial(host, grpc.WithInsecure(),
         grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
     if err != nil {
@@ -442,12 +449,16 @@ func callEndpoint(host, endpoint, data string) (res string, err error) {
         return
     }
 
-    jsonbytes, err := json.MarshalIndent(reply, "", "    ")
-    if err != nil {
-        return
+    if respInJson {
+        jsonbytes, err := json.MarshalIndent(reply, "", "    ")
+        if err != nil {
+            return "", err
+        }
+        res = string(jsonbytes)
+    } else {
+        res = reply.String()
     }
-
-    return string(jsonbytes), nil
+    return
 }
 
 func massiveCallEndpoint() {

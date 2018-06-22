@@ -22,11 +22,11 @@ function callEndpoint(name, body) {
     var rawAddr = document.getElementById("in-hostaddress").value
     if (rawAddr.trim() === "") {rawAddr = "0.0.0.0:8087"}
     var encodedAddr = encodeURIComponent(rawAddr)
-    var url = "http://localhost:"+arionPort+"/call?e="+name+"&h="+rawAddr
+    var url = "http://localhost:"+arionPort+"/call?e="+name+"&h="+rawAddr+"&format=json"
     console.log("calling url: "+url)
     var outputElement = document.getElementById("invokeresult"+name)
     simpleAjaxCall("POST", url, body, function(resp) {
-        outputElement.innerText = resp
+        outputElement.innerHTML = "<pre>"+resp+"</pre>"
     })
 }
 
