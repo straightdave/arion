@@ -144,6 +144,8 @@ Message: Hello Dave
 >You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 
 
+>If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored.
+
 Using `-json` to have JSON format output:
 ```bash
 $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
