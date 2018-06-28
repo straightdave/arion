@@ -1,6 +1,20 @@
 function toggleInvokePanel(element) {
     console.log("clicked endpoint name bar: " + element.innerText)
     var id = "invokepanel" + element.innerText
+
+    if (typeof(Storage) !== "undefined") {
+        var svcName = document.getElementById("svctitle").innerText
+        var methodName = element.innerText
+        var key = svcName + "#" + methodName
+        console.log("loading stored request of " + key)
+        var content = localStorage.getItem(key)
+        if (content !== "") {
+            document.getElementById("invokebody" + methodName).value = content
+        }
+        else {
+            console.log("no stored content for " + key)
+        }
+    }
     document.getElementById(id).classList.toggle("invisible")
 }
 
@@ -13,6 +27,14 @@ function invokeCall(element) {
     }
     var methodName = rawStr.substr(12)
     var reqBody = document.getElementById("invokebody"+methodName).value
+
+    if (typeof(Storage) !== "undefined") {
+        var svcName = document.getElementById("svctitle").innerText
+        var key = svcName + "#" + methodName
+        console.log("Saving req body to " + key)
+        localStorage.setItem(key, reqBody)
+    }
+
     callEndpoint(methodName, reqBody)
 }
 
