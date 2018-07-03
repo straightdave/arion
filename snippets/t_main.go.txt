@@ -529,7 +529,8 @@ func prepSingleReqTarget() *trunks.Gtarget {
 
     reply := getVarByTypeName(endName + "Response")
     if reply == nil {
-        panicf("Failed to get response object")
+        log.Println("WARN response type not found; treating as protobuf.Empty")
+        reply = &protoempty.Empty{}
     }
 
     if err = jsonpb.UnmarshalString(*_data, req); err != nil {
