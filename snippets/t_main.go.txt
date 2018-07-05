@@ -15,6 +15,7 @@ import (
     "net/url"
     "os"
     "regexp"
+    "strconv"
     "strings"
     "text/template"
     "time"
@@ -36,6 +37,7 @@ var (
     _hostList        []string
     _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
     _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
+    _regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
 
     // flags
     _ver       = flag.Bool("v", false, "print version info")
@@ -515,6 +517,9 @@ func massiveCallEndpoint() {
     fmt.Printf("Max: %s\n", metrics.Latencies.Max)
 }
 
+// massive call
+// read request from command line '-d'
+// in this case, it supports unique/random value
 func prepSingleReqTarget() *trunks.Gtarget {
     svcName, endName := parseEndpointName(*_endpoint)
     method, err := getMethodPath(svcName, endName)
@@ -522,15 +527,46 @@ func prepSingleReqTarget() *trunks.Gtarget {
         panic(err)
     }
 
-    req := getVarByTypeName(endName + "Request")
-    if req == nil {
-        panicf("Failed to get request object")
-    }
-
     reply := getVarByTypeName(endName + "Response")
     if reply == nil {
         log.Println("WARN response type not found; treating as protobuf.Empty")
         reply = &protoempty.Empty{}
+    }
+
+    // see if data has random/unique marks
+    // to generate lots of requests based on that
+    if strings.Contains(*_data, "<<arion:") {
+        // total amount of requests to be generated
+        total := *_rate * uint64((*_duration).Seconds())
+        if total > 10000000 {
+            // Dirty solution:
+            // suppose each request is 100 byte large, 10000000 requests are ~1G
+            // we consider this as the bar for now
+            panic("Amount is too large (> 10000000) to generate unique requests")
+        }
+
+        var requests []proto.Message
+        genData := genUniqueData(*_data, total)
+        for _, d := range genData {
+            r := getVarByTypeName(endName + "Request") // must not nil
+            if err := jsonpb.UnmarshalString(d, r); err != nil {
+                panicf("ERR unmarshalling requests [%s] failed: %v\n", d, err)
+            }
+            requests = append(requests, r)
+        }
+        log.Printf("Generated %d requests\n", len(requests))
+
+        return &trunks.Gtarget{
+            MethodName: method,
+            Requests:   requests,
+            Response:   reply,
+        }
+    }
+
+    // no random/unique marks
+    req := getVarByTypeName(endName + "Request")
+    if req == nil {
+        panicf("Failed to get request object")
     }
 
     if err = jsonpb.UnmarshalString(*_data, req); err != nil {
@@ -544,6 +580,8 @@ func prepSingleReqTarget() *trunks.Gtarget {
     }
 }
 
+// massive call
+// read multiple requests from a file
 func prepMultipleReqTarget() *trunks.Gtarget {
     svcName, endName := parseEndpointName(*_endpoint)
     method, err := getMethodPath(svcName, endName)
@@ -553,7 +591,8 @@ func prepMultipleReqTarget() *trunks.Gtarget {
 
     reply := getVarByTypeName(endName + "Response")
     if reply == nil {
-        panicf("Failed to get response object")
+        log.Println("WARN response type not found; treating as protobuf.Empty")
+        reply = &protoempty.Empty{}
     }
 
     bts, err := ioutil.ReadFile(*_dataFile)
@@ -640,4 +679,70 @@ func recoverHandling(w http.ResponseWriter) {
 
 func panicf(f string, v ...interface{}) {
     panic(fmt.Sprintf(f, v...))
+}
+
+// --- unique value stuff
+type replacetask struct {
+    mark    string
+    mode    string
+    typ     string
+    strsize int
+}
+
+// how to use index to create unique string or int value
+// TODO: improve this
+func (t *replacetask) do(rawStr *string, index uint64) {
+    realvalue := ""
+    switch t.typ {
+    case "string":
+        realvalue = fmt.Sprintf("%d", index)
+    case "int":
+        realvalue = fmt.Sprintf("%d", index)
+    }
+    *rawStr = strings.Replace(*rawStr, t.mark, realvalue, 1)
+}
+
+// gen random value (now it is only supporting string type)
+// and only support the first and only one mark
+// { ... <<arion:unique:string:10>> ... } => { ... "0000000123" ...}
+func genUniqueData(rawValue string, amount uint64) []string {
+    matches := _regexDataMark.FindAllStringSubmatch(rawValue, -1)
+
+    var tasks []*replacetask
+    var err error
+    for _, subm := range matches {
+        task := &replacetask{
+            mark: subm[0],
+            mode: strings.ToLower(subm[1]),
+        }
+        spls := strings.Split(subm[2], ":")
+        switch strings.ToLower(spls[0]) {
+        case "string":
+            task.typ = "string"
+            if len(spls) > 1 {
+                task.strsize, err = strconv.Atoi(spls[1])
+                if err != nil {
+                    panic(err)
+                }
+            }
+        case "int":
+            task.typ = "int"
+            // TODO: size of number type
+        default:
+            // only supporting int and string types
+            panic("non-supported type")
+        }
+        tasks = append(tasks, task)
+    }
+
+    // apply
+    var result []string
+    for i := uint64(0); i < amount; i++ {
+        tempStr := rawValue // copy original data
+        for _, t := range tasks {
+            t.do(&tempStr, i)
+        }
+        result = append(result, tempStr)
+    }
+    return result
 }
