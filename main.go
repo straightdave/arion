@@ -28,6 +28,8 @@ var (
 	fClearTempFiles = flag.Bool("c", false, "to clear temp folder after Postgal is generated\n*NOTE*: use -o to generate Postgal out of temp folder")
 	fGoGetUpdate    = flag.Bool("u", false, "update dependencies when building Postgal")
 	fListPostgal    = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
+	fCrossBuild     = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
+	fVerbose        = flag.Bool("verbose", false, "print verbose information when building postgals")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
 )
@@ -85,7 +87,7 @@ func main() {
 	}
 
 	// compile all
-	err = compileDir(tmpDir, *fOutputFile, *fGoGetUpdate)
+	err = compileDir(tmpDir, *fOutputFile, *fCrossBuild, *fGoGetUpdate, *fVerbose)
 	if err != nil {
 		log.Fatalln("failed to compile:", err.Error())
 	}
@@ -250,7 +252,7 @@ func restoreFile(raw, dirName, fileName string) error {
 	return newSourceFile(gozip.DecompressString(raw), dirName, fileName)
 }
 
-func compileDir(dirName, binOutputName string, usingUpdate bool) error {
+func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose bool) error {
 	_, err := exec.LookPath("go")
 	if err != nil {
 		log.Println("no go installed")
@@ -303,8 +305,21 @@ func compileDir(dirName, binOutputName string, usingUpdate bool) error {
 
 	// build
 	var opts []string
-	opts = append(opts, "build", "-v", "-o", binOutputName)
-	err = exec.Command("go", opts...).Run()
+	var output []byte
+	if crossBuild != "" {
+		log.Println("Cross building:", crossBuild)
+		splts := strings.Split(crossBuild, " ")
+		opts = append(opts, splts...)
+		opts = append(opts, "go", "build", "-v", "-o", binOutputName)
+		output, err = exec.Command("env", opts...).CombinedOutput()
+	} else {
+		opts = append(opts, "build", "-v", "-o", binOutputName)
+		output, err = exec.Command("go", opts...).CombinedOutput()
+	}
+
+	if verbose {
+		log.Println(string(output))
+	}
 	if err != nil {
 		log.Println("failed to compile:", err.Error())
 		return err

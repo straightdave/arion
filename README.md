@@ -18,12 +18,16 @@ $ ./arion -h
 Usage of ./arion:
   -c  to clear temp folder after Postgal is generated
       *NOTE*: use -o to generate Postgal out of temp folder
+  -cross string
+      Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'
   -l  list Postgals in current folder or all ./temp* folders
   -o string
-      output executable binary file (default "postgal")
+      output executable binary file
   -src string
       source pb.go file
   -u  update dependencies when building Postgal
+  -verbose
+      print verbose information when building postgals
 ```
 
 ## Use Arion to generate PostGal
@@ -53,6 +57,13 @@ Besides, some packages supporting code analyzing and performance testing:
 * github.com/straightdave/lesphina
 * github.com/straightdave/trunks
 >If you find strange panic when using Arion or Postgals, you can manually update those packages by `go get -u -f <package>` and re-generate Postgals to see if this can solve the problems or not.
+
+### Cross-build
+If you want Arion to build a postgal working on another platform (e.g linux/amd64), you can use `-cross` flag:
+```
+$ ./arion -src <your.any.pb.go> -cross 'GOOS=linux GOARCH=amd64'
+```
+> There are only several valid pairs like linux/amd64, etc.
 
 ## List *Postgals*
 ```bash
