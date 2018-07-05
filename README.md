@@ -3,7 +3,7 @@ Arion
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
 Arion is a gRPC tool to:
-- get endpoints definition
+- get service information
 - debug endpoints
 - do the performance test agains endpoints
 
@@ -43,7 +43,7 @@ $ ./arion -src <your.any.pb.go> -u
 2018/05/24 22:52:49 SUCCESS
 ```
 
-> Using `-u` to force-update local dependencies. It's required to use once if some underlying packages are not up-to-date.
+> Using `-u` to force-update local dependencies. It's required (once) if some underlying packages are not up-to-date.
 
 Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called *Postgal*. You can use `-o` to specify other path/name for this executable file. Also you can use `-c` to clear temp folder after *Postgal* is generated.
 
@@ -53,7 +53,7 @@ When using Arion, your machine should have internet access since Arion will `go 
 * golang.org/x/net/context
 * google.golang.org/grpc
 
-Besides, some packages supporting code analyzing and performance testing:
+Besides, some packages provide code analyzing and performance testing:
 * github.com/straightdave/lesphina
 * github.com/straightdave/trunks
 >If you find strange panic when using Arion or Postgals, you can manually update those packages by `go get -u -f <package>` and re-generate Postgals to see if this can solve the problems or not.
@@ -90,7 +90,7 @@ Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 Usage:
 ```
--at string
+  -at string
       address to host PostGal in browser mode (default ":9999")
   -d string
       request data
@@ -152,10 +152,11 @@ Also you can call one endpoint:
 $ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
->You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
+> **NOTE**
+> - If `-h` option is not specified, postgal uses '0.0.0.0:8087' by default.
+> - You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
+>If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored
 
-
->If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored.
 
 Using `-json` to have JSON format output:
 ```bash
@@ -165,7 +166,9 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
 }
 ```
 
-To execute an performance test against one endpoint:
+### Performance test with Postgal
+
+To execute performance tests against one endpoint:
 ```bash
 $ ./postgal -e Hello -d '{"Name": "Dave"}' -x -rate 10 -duration 10s
 Massive Call...
@@ -183,6 +186,25 @@ To specify number of workers (maximun concurrent goroutines; default is 10) in p
 ```bash
 $ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
 ```
+
+You can specify a list of IP addresses to execute preformance test against a cluster:
+```bash
+$ ./postgal -h <address>,<address> -e <endpoint> -d 'test data' -x
+```
+
+#### auto-generated value
+Currently Postgal supports generating unique values when doing the performance test:
+```bash
+$ ./postgal -e Hello -d '{"Name":"Ultraman-<<arion:unique:string>>"}' -x -rate 5 -duration 10s
+```
+It will generate requests like:
+```
+{"Name":"Ultraman-0"}
+{"Name":"Ultraman-1"}
+...
+{"Name":"Ultraman-49"}
+```
+> __NOTE__ for now it's an experimental feature and being improved
 
 ### Browser Mode
 Browser mode is the graphic way to use Postgals. You can use is just like Postman.

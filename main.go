@@ -310,10 +310,10 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		log.Println("Cross building:", crossBuild)
 		splts := strings.Split(crossBuild, " ")
 		opts = append(opts, splts...)
-		opts = append(opts, "go", "build", "-v", "-o", binOutputName)
+		opts = append(opts, "go", "build", "-o", binOutputName, "-v")
 		output, err = exec.Command("env", opts...).CombinedOutput()
 	} else {
-		opts = append(opts, "build", "-v", "-o", binOutputName)
+		opts = append(opts, "build", "-o", binOutputName, "-v")
 		output, err = exec.Command("go", opts...).CombinedOutput()
 	}
 
