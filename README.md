@@ -241,3 +241,7 @@ or
 
 >The developing web server will serve all static files in `web/` folder.
 This is helpful for developing web pages before compiling them into binary.
+
+## License
+
+MIT © [Dave Wu](https://github.com/straightdave)
