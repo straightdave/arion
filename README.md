@@ -1,5 +1,12 @@
-Arion
-=======
+<h1 align="center">
+	<br>
+	<br>
+	<img width="320" src="media/logo.svg" alt="Arion">
+	<br>
+	<br>
+	<br>
+</h1>
+
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
 Arion is a gRPC tool to:
