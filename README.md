@@ -60,7 +60,7 @@ If you get compiling error after running
 ```bash
 ./arion -src <your.any.pb.go> -u
 ```
-try to create a temp folder in your $GOPATH/src and copy your.any.pb.go file to that folder and try again
+Please create a temp folder in your $GOPATH/src and copy `your.any.pb.go` file to the temp folder then try again
 
 When using Arion, your machine should have internet access if you don't have packages listed below. Arion will `go get` some official gRPC related packages including:
 * github.com/golang/protobuf/jsonpb
