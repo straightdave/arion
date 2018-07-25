@@ -12,7 +12,7 @@
 Arion is a gRPC tool to:
 - get service information
 - debug endpoints
-- do the performance test agains endpoints
+- do the performance test against endpoints
 
 ## Get Arion
 ```bash
@@ -70,7 +70,9 @@ If you want Arion to build a postgal working on another platform (e.g linux/amd6
 ```
 $ ./arion -src <your.any.pb.go> -cross 'GOOS=linux GOARCH=amd64'
 ```
-> There are only several valid pairs like linux/amd64, etc.
+> CAUSTION:
+> - There are only several valid pairs like linux/amd64, etc.
+> - Experimental. Sometimes it fails :smile:. In that case, you can go to source code folder and do the cross-build yourself.
 
 ## List *Postgals*
 ```bash
