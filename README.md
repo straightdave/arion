@@ -55,6 +55,13 @@ $ ./arion -src <your.any.pb.go> -u
 Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called *Postgal*. You can use `-o` to specify other path/name for this executable file. Also you can use `-c` to clear temp folder after *Postgal* is generated.
 
 *NOTE*
+
+If you get compiling error after running
+```bash
+./arion -src <your.any.pb.go> -u
+```
+try to create a temp folder in your $GOPATH/src and copy your.any.pb.go file to that folder and try again
+
 When using Arion, your machine should have internet access if you don't have packages listed below. Arion will `go get` some official gRPC related packages including:
 * github.com/golang/protobuf/jsonpb
 * golang.org/x/net/context
@@ -105,8 +112,8 @@ Usage:
       request data
   -debug
       print some debug info (for dev purpose)
-  -df string
-      request data file
+  -df string 
+      request data file (needs -x)
       Data in the file will be read line by line
   -duration duration
       execution duration like 10s, 20m (default 10s)
