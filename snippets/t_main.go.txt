@@ -40,22 +40,23 @@ var (
     _regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
 
     // flags
-    _ver       = flag.Bool("v", false, "print version info")
-    _debug     = flag.Bool("debug", false, "print some debug info (for dev purpose)")
-    _serve     = flag.Bool("serve", false, "use PostGal in browser mode")
-    _arionHost = flag.String("at", ":9999", "address to host PostGal in browser mode")
-    _info      = flag.Bool("i", false, "show info")
-    _type      = flag.String("t", "", "data type name")
-    _hosts     = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
-    _endpoint  = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
-    _json      = flag.Bool("json", false, "response in JSON format")
-    _massive   = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
-    _data      = flag.String("d", "", "request data")
-    _dataFile  = flag.String("df", "", "request data file\nData in the file will be read line by line")
-    _loop      = flag.Bool("loop", false, "repeat all requests in loops")
-    _duration  = flag.Duration("duration", 10*time.Second, "execution duration like 10s, 20m")
-    _rate      = flag.Uint64("rate", 1, "execution frequency per second")
-    _worker    = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
+    _ver        = flag.Bool("v", false, "print version info")
+    _debug      = flag.Bool("debug", false, "print some debug info (for dev purpose)")
+    _serve      = flag.Bool("serve", false, "use PostGal in browser mode")
+    _arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
+    _info       = flag.Bool("i", false, "show info")
+    _type       = flag.String("t", "", "data type name")
+    _hosts      = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
+    _endpoint   = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+    _json       = flag.Bool("json", false, "response in JSON format")
+    _massive    = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
+    _data       = flag.String("d", "", "request data")
+    _dataFile   = flag.String("df", "", "request data file\nData in the file will be read line by line")
+    _loop       = flag.Bool("loop", false, "repeat all requests in loops")
+    _duration   = flag.Duration("duration", 10*time.Second, "execution duration like 10s, 20m")
+    _rate       = flag.Uint64("rate", 1, "execution frequency per second")
+    _worker     = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
+    _dumpToFile = flag.String("dumpto", "", "dump massive call responses to file")
 )
 
 var _version, _checksum string
@@ -487,13 +488,11 @@ func massiveCallEndpoint() {
 
     fmt.Println("Max workers:", *_worker)
 
-    var burner *trunks.Burner
-    var err error
-    if *_loop {
-        burner, err = trunks.NewBurner(_hostList, trunks.WithLoop(), trunks.NumWorker(*_worker))
-    } else {
-        burner, err = trunks.NewBurner(_hostList, trunks.NumWorker(*_worker))
-    }
+    burner, err := trunks.NewBurner(_hostList,
+        trunks.WithLooping(*_loop),
+        trunks.WithNumWorker(*_worker),
+        trunks.WithDumpFile(*_dumpToFile),
+    )
     if err != nil {
         panic(err)
     }
@@ -507,6 +506,11 @@ func massiveCallEndpoint() {
     }
     dur := time.Since(startT)
     metrics.Close()
+
+    // possibly dump the response
+    if err := burner.WaitDumpDone(); err != nil {
+        fmt.Printf("WARN: failed to dump response to file: %v\n", err)
+    }
 
     fmt.Println("----------------------")
     fmt.Printf("Duration: %v\n", dur.Seconds())
