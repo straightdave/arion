@@ -10,7 +10,7 @@
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
 Arion is a gRPC tool to:
-- get service information
+- get service / endpoint / data-entity information
 - debug endpoints
 - do the performance test against endpoints
 
@@ -97,8 +97,8 @@ Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ## Use PostGal
 
-Usage:
 ```
+Usage of ./postgal:
   -at string
       address to host PostGal in browser mode (default ":9999")
   -d string
@@ -108,6 +108,8 @@ Usage:
   -df string
       request data file
       Data in the file will be read line by line
+  -dumpto string
+      dump massive call responses to file
   -duration duration
       execution duration like 10s, 20m (default 10s)
   -e string
@@ -130,6 +132,8 @@ Usage:
       workers (concurrent goroutines) (default 10)
   -x  massive call endpoint (needs -rate and -duration)
 ```
+
+`TL;DR`: please read some examples below.
 
 ### Console Mode
 In console mode, PostGal can list simple endpoints of gRPC services defined in your pb.go file.
@@ -179,10 +183,13 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
 
 To execute performance tests against one endpoint:
 ```bash
-$ ./postgal -e Hello -d '{"Name": "Dave"}' -x -rate 10 -duration 10s
+$ ./postgal -e Hello -d '{"Name": "Dave"}' -x
 Massive Call...
 ... (report)
 ```
+> **NOTE**
+> * Again, if omit `-h` option, the default target host is `0.0.0.0:8087`
+> * When `-x` is specified, it also implies `-rate 1 -duration 10s` by default
 
 You can use `-df` to specify a data file which consists of multiple request data to conduct the massive call:
 ```bash
@@ -196,10 +203,19 @@ To specify number of workers (maximun concurrent goroutines; default is 10) in p
 $ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
 ```
 
-You can specify a list of IP addresses to execute preformance test against a cluster:
+You can specify a list of IP addresses to execute preformance test against a cluster.
+In this case, `postgal` would send requests to those hosts in a simple round-robin way.
+
 ```bash
 $ ./postgal -h <address>,<address> -e <endpoint> -d 'test data' -x
 ```
+
+To dump responses to a file:
+```bash
+$ ./postgal -e Hello -d '{"Name":"daveeeeee"}' -x -dumpto responses.dump
+```
+So `postgal` would serialize successful responses into _json_ and write them to the file, line by line.
+
 
 #### auto-generated value
 Currently Postgal supports generating unique values when doing the performance test:
