@@ -508,8 +508,11 @@ func massiveCallEndpoint() {
     dur := time.Since(startT)
     metrics.Close()
 
+    fmt.Println("----------------------")
     fmt.Printf("Duration: %v\n", dur.Seconds())
+    fmt.Printf("Actual Rate: %f\n", metrics.Rate)
     fmt.Printf("Total Requests: %d\n", metrics.Requests)
+    fmt.Printf("Success: %f\n", metrics.Success)
     fmt.Printf("Mean: %s\n", metrics.Latencies.Mean)
     fmt.Printf("50th: %s\n", metrics.Latencies.P50)
     fmt.Printf("95th: %s\n", metrics.Latencies.P95)
