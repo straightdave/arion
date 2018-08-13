@@ -27,20 +27,21 @@ var (
 	fOutputFile     = flag.String("o", "", "output executable binary file")
 	fClearTempFiles = flag.Bool("c", false, "to clear temp folder after Postgal is generated\n*NOTE*: use -o to generate Postgal out of temp folder")
 	fGoGetUpdate    = flag.Bool("u", false, "update dependencies when building Postgal")
-	fListPostgal    = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
+	fListPostgals   = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
 	fCrossBuild     = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
 	fVerbose        = flag.Bool("verbose", false, "print verbose information when building postgals")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
+
+	green  = color.New(color.FgGreen).SprintfFunc()
+	yellow = color.New(color.FgYellow).SprintfFunc()
 )
 
 func main() {
 	flag.Parse()
-	green := color.New(color.FgGreen).SprintfFunc()
 
-	// list postgals
-	if *fListPostgal {
-		listPostgal()
+	if *fListPostgals {
+		listPostgals()
 		return
 	}
 
@@ -48,8 +49,10 @@ func main() {
 		log.Fatalln("sourceFile cannot be blank")
 	}
 
-	// generate temporary folder in current one
-	tmpDir, err := ioutil.TempDir(".", "temp")
+	baseName := filepath.Base(*fSourceFile)
+	baseName = strings.TrimSuffix(baseName, ".go")
+	baseName = strings.TrimSuffix(baseName, ".pb")
+	tmpDir, err := ioutil.TempDir(".", "temp-"+baseName+"-")
 	if err != nil {
 		log.Fatalln("cannot create temp dir:", err.Error())
 	}
@@ -94,7 +97,7 @@ func main() {
 	log.Println(green("SUCCESS"))
 }
 
-func listPostgal() {
+func listPostgals() {
 	cDir, err := os.Getwd()
 	if err != nil {
 		log.Fatalln("failed to get working dir:", err.Error())
@@ -255,7 +258,7 @@ func restoreFile(raw, dirName, fileName string) error {
 func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose bool) error {
 	_, err := exec.LookPath("go")
 	if err != nil {
-		log.Println("no go installed")
+		log.Println(yellow("no go installed"))
 		return err
 	}
 
@@ -294,27 +297,51 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		}
 	}()
 
-	// run go get ./... first
+	var output []byte
+
+	// get dependent packages
+	log.Printf("GO-get all dependencies ... ")
+	updateOptions := []string{"get", "-d"}
 	if usingUpdate {
-		log.Println("force-update all dependencies...")
-		_ = exec.Command("go", "get", "-f", "-u", "./...").Run() // ignore exit error
+		log.Println("(force-update)")
+		updateOptions = append(updateOptions, "-u")
 	} else {
-		log.Println("get/check all dependencies...")
-		_ = exec.Command("go", "get", "./...").Run() // ignore exit error
+		log.Println()
+	}
+	if verbose {
+		updateOptions = append(updateOptions, "-v")
+	}
+	updateOptions = append(updateOptions, "./...")
+	output, err = exec.Command("go", updateOptions...).CombinedOutput()
+
+	if verbose {
+		log.Println(string(output))
+	}
+	if err != nil {
+		log.Println(yellow("failed to get dependent packages: %v", err))
 	}
 
 	// build
-	var opts []string
-	var output []byte
+	log.Println("Go-build ...")
+	buildOptions := []string{}
 	if crossBuild != "" {
 		log.Println("Cross building:", crossBuild)
+
+		// get golang.org/x/sys/unix
+		// this is required to build linux binaries
+		log.Println("Getting golang.org/x/sys/unix ...")
+		if err := exec.Command("go", "get", "golang.org/x/sys/unix").Run(); err != nil {
+			log.Println(yellow("failed to get golang.org/x/sys/unix"))
+			return err
+		}
+
 		splts := strings.Split(crossBuild, " ")
-		opts = append(opts, splts...)
-		opts = append(opts, "go", "build", "-o", binOutputName, "-v")
-		output, err = exec.Command("env", opts...).CombinedOutput()
+		buildOptions = append(buildOptions, splts...)
+		buildOptions = append(buildOptions, "go", "build", "-o", binOutputName, "-v")
+		output, err = exec.Command("env", buildOptions...).CombinedOutput()
 	} else {
-		opts = append(opts, "build", "-o", binOutputName, "-v")
-		output, err = exec.Command("go", opts...).CombinedOutput()
+		buildOptions = append(buildOptions, "build", "-o", binOutputName, "-v")
+		output, err = exec.Command("go", buildOptions...).CombinedOutput()
 	}
 
 	if verbose {

@@ -1,4 +1,4 @@
-package main
+package awesome
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
