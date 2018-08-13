@@ -540,6 +540,18 @@ func prepSingleReqTarget() *trunks.Gtarget {
         reply = &protoempty.Empty{}
     }
 
+    req := getVarByTypeName(endName + "Request")
+    if req == nil {
+        log.Println("WARN request type not found; treating as protobuf.Empty")
+        req = &protoempty.Empty{}
+
+        return &trunks.Gtarget{
+            MethodName: method,
+            Requests:   []proto.Message{req},
+            Response:   reply,
+        }
+    }
+
     // see if data has random/unique marks
     // to generate lots of requests based on that
     if strings.Contains(*_data, "<<arion:") {
@@ -568,12 +580,6 @@ func prepSingleReqTarget() *trunks.Gtarget {
             Requests:   requests,
             Response:   reply,
         }
-    }
-
-    // no random/unique marks
-    req := getVarByTypeName(endName + "Request")
-    if req == nil {
-        panicf("Failed to get request object")
     }
 
     if err = jsonpb.UnmarshalString(*_data, req); err != nil {
