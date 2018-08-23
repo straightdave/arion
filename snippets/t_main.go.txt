@@ -35,7 +35,7 @@ var (
     _les             *lesphina.Lesphina
     _metaData        *MetaData
     _hostList        []string
-    _regexMethodPath = regexp.MustCompile(`grpc\.Invoke.+?"(.+?)"`)
+    _regexMethodPath = regexp.MustCompile(`\.Invoke.+?"(.+?)"`)
     _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
     _regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
 
