@@ -198,7 +198,7 @@ $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 30s -loop
 
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all requests are sent once.
 
-To specify number of workers (maximun concurrent goroutines; default is 10) in performance testing:
+To specify number of workers (maximum concurrent goroutines; default is 10) in performance testing:
 ```bash
 $ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
 ```
