@@ -25,13 +25,12 @@ import (
 )
 
 var (
-	fSourceFile     = flag.String("src", "", "source pb.go file")
-	fOutputFile     = flag.String("o", "", "output executable binary file")
-	fClearTempFiles = flag.Bool("c", false, "to clear temp folder after Postgal is generated\n*NOTE*: use -o to generate Postgal out of temp folder")
-	fGoGetUpdate    = flag.Bool("u", false, "update dependencies when building Postgal")
-	fListPostgals   = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
-	fCrossBuild     = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
-	fVerbose        = flag.Bool("verbose", false, "print verbose information when building postgals")
+	fSourceFile   = flag.String("src", "", "source pb.go file")
+	fOutputFile   = flag.String("o", "", "output executable binary file")
+	fGoGetUpdate  = flag.Bool("u", false, "update dependencies when building Postgal")
+	fListPostgals = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
+	fCrossBuild   = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
+	fVerbose      = flag.Bool("verbose", false, "print verbose information when building postgals")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
 
@@ -57,14 +56,6 @@ func main() {
 	tmpDir, err := ioutil.TempDir(".", "temp-"+baseName+"-")
 	if err != nil {
 		log.Fatalln("cannot create temp dir:", err.Error())
-	}
-	if *fClearTempFiles {
-		defer func(dirName string) {
-			log.Printf("clear temp folder %s\n", dirName)
-			if err := os.RemoveAll(dirName); err != nil {
-				log.Fatalln(err)
-			}
-		}(tmpDir)
 	}
 
 	// modify package name of the pb.go file
@@ -312,17 +303,16 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}
 
 	if usingUpdate {
-		log.Println(yellow("force-update"))
+		log.Println(yellow("force update"))
 		cmdToGetDep.Args = append(cmdToGetDep.Args, "-u", "-f")
 	}
 
 	cmdToGetDep.Args = append(cmdToGetDep.Args, deps...)
-	err = cmdToGetDep.StartWithTimeout(60 * time.Second)
+	err = cmdToGetDep.StartWithTimeout(180 * time.Second)
 	if err != nil {
 		return err
 	}
 
-	log.Println("Build ...")
 	cmdToBuild := &asyncexec.AsyncExec{
 		Name: "go",
 		Args: []string{"build"},
@@ -332,32 +322,30 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		cmdToBuild.Args = append(cmdToBuild.Args, "-v")
 	}
 
-	cmdToBuild.Args = append(cmdToBuild.Args, "-o", binOutputName)
+	if crossBuild != "" {
+		log.Println(yellow("cross build"))
+		for _, s := range strings.Split(crossBuild, " ") {
+			s = strings.Trim(s, " \n")
+			indexOfEqual := strings.Index(s, "=")
+			if indexOfEqual >= 0 {
+				cmdToBuild.SetEnv(s[:indexOfEqual], s[indexOfEqual+1:])
+			}
+		}
 
-	err = cmdToBuild.StartWithTimeout(60 * time.Second)
-	if err != nil {
-		return err
+		log.Println("Get golang.org/x/sys/unix ...")
+		c := &asyncexec.AsyncExec{
+			Name: "go",
+			Args: []string{"get", "golang.org/x/sys/unix"},
+		}
+		if err := c.StartWithTimeout(60 * time.Second); err != nil {
+			return err
+		}
 	}
 
-	// buildOptions := []string{}
-	// if crossBuild != "" {
-	// 	log.Println("Cross building:", crossBuild)
-
-	// 	// get golang.org/x/sys/unix
-	// 	// this is required to build linux binaries
-	// 	log.Println("Getting golang.org/x/sys/unix ...")
-	// 	if err := exec.Command("go", "get", "golang.org/x/sys/unix").Run(); err != nil {
-	// 		log.Println(yellow("failed to get golang.org/x/sys/unix"))
-	// 		return err
-	// 	}
-
-	// 	splts := strings.Split(crossBuild, " ")
-	// 	buildOptions = append(buildOptions, splts...)
-	// 	buildOptions = append(buildOptions, "go", "build", "-o", binOutputName, "-v")
-	// 	output, err = exec.Command("env", buildOptions...).CombinedOutput()
-	// } else {
-	// 	buildOptions = append(buildOptions, "build", "-o", binOutputName, "-v")
-	// 	output, err = exec.Command("go", buildOptions...).CombinedOutput()
-	// }
+	log.Println("Build ...")
+	cmdToBuild.Args = append(cmdToBuild.Args, "-o", binOutputName)
+	if err := cmdToBuild.StartWithTimeout(60 * time.Second); err != nil {
+		return err
+	}
 	return nil
 }

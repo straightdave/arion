@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"time"
 
@@ -46,10 +47,13 @@ func (ae *AsyncExec) Start() error {
 	}
 
 	if ae.Env != nil {
+		cmd.Env = append(cmd.Env, os.Environ()...)
 		for k, v := range ae.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
+
+	// fmt.Printf("Cmd => %+v\n", cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
