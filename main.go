@@ -308,7 +308,7 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}
 
 	cmdToGetDep.Args = append(cmdToGetDep.Args, deps...)
-	err = cmdToGetDep.StartWithTimeout(180 * time.Second)
+	err = cmdToGetDep.StartWithTimeout(300 * time.Second)
 	if err != nil {
 		return err
 	}
