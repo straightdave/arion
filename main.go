@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/straightdave/arion/lib"
+	"github.com/straightdave/arion/lib/asyncexec"
 	gozip "github.com/straightdave/gozip/lib"
 	"github.com/straightdave/lesphina"
 )
@@ -258,8 +260,12 @@ func restoreFile(raw, dirName, fileName string) error {
 func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose bool) error {
 	_, err := exec.LookPath("go")
 	if err != nil {
-		log.Println(yellow("no go installed"))
+		log.Println(yellow("The 'go' compiler is not installed"))
 		return err
+	}
+
+	if binOutputName == "" {
+		binOutputName = "postgal"
 	}
 
 	cDir, err := os.Getwd()
@@ -270,14 +276,6 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 
 	if !path.IsAbs(dirName) {
 		dirName = path.Join(cDir, dirName)
-	}
-
-	if binOutputName != "" {
-		if !path.IsAbs(binOutputName) {
-			binOutputName = path.Join(cDir, binOutputName)
-		}
-	} else {
-		binOutputName = "postgal"
 	}
 
 	// change dir
@@ -297,59 +295,69 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		}
 	}()
 
-	var output []byte
-
-	// get dependent packages
-	log.Printf("GO-get all dependencies ... ")
-	updateOptions := []string{"get", "-d"}
-	if usingUpdate {
-		log.Println("(force-update)")
-		updateOptions = append(updateOptions, "-u")
-	} else {
-		log.Println()
-	}
-	if verbose {
-		updateOptions = append(updateOptions, "-v")
-	}
-	updateOptions = append(updateOptions, "./...")
-	output, err = exec.Command("go", updateOptions...).CombinedOutput()
-
-	if verbose {
-		log.Println(string(output))
-	}
+	log.Printf("Analyzing dependencies ...")
+	deps, err := lib.ListDepsOfCurrentPackage()
 	if err != nil {
-		log.Println(yellow("failed to get dependent packages: %v", err))
-	}
-
-	// build
-	log.Println("Go-build ...")
-	buildOptions := []string{}
-	if crossBuild != "" {
-		log.Println("Cross building:", crossBuild)
-
-		// get golang.org/x/sys/unix
-		// this is required to build linux binaries
-		log.Println("Getting golang.org/x/sys/unix ...")
-		if err := exec.Command("go", "get", "golang.org/x/sys/unix").Run(); err != nil {
-			log.Println(yellow("failed to get golang.org/x/sys/unix"))
-			return err
-		}
-
-		splts := strings.Split(crossBuild, " ")
-		buildOptions = append(buildOptions, splts...)
-		buildOptions = append(buildOptions, "go", "build", "-o", binOutputName, "-v")
-		output, err = exec.Command("env", buildOptions...).CombinedOutput()
-	} else {
-		buildOptions = append(buildOptions, "build", "-o", binOutputName, "-v")
-		output, err = exec.Command("go", buildOptions...).CombinedOutput()
-	}
-
-	if verbose {
-		log.Println(string(output))
-	}
-	if err != nil {
-		log.Println("failed to compile:", err.Error())
 		return err
 	}
+
+	log.Printf("Install dependencies ...")
+	cmdToGetDep := &asyncexec.AsyncExec{
+		Name: "go",
+		Args: []string{"get", "-d"},
+	}
+
+	if verbose {
+		cmdToGetDep.Args = append(cmdToGetDep.Args, "-v")
+	}
+
+	if usingUpdate {
+		log.Println(yellow("force-update"))
+		cmdToGetDep.Args = append(cmdToGetDep.Args, "-u", "-f")
+	}
+
+	cmdToGetDep.Args = append(cmdToGetDep.Args, deps...)
+	err = cmdToGetDep.StartWithTimeout(60 * time.Second)
+	if err != nil {
+		return err
+	}
+
+	log.Println("Build ...")
+	cmdToBuild := &asyncexec.AsyncExec{
+		Name: "go",
+		Args: []string{"build"},
+	}
+
+	if verbose {
+		cmdToBuild.Args = append(cmdToBuild.Args, "-v")
+	}
+
+	cmdToBuild.Args = append(cmdToBuild.Args, "-o", binOutputName)
+
+	err = cmdToBuild.StartWithTimeout(60 * time.Second)
+	if err != nil {
+		return err
+	}
+
+	// buildOptions := []string{}
+	// if crossBuild != "" {
+	// 	log.Println("Cross building:", crossBuild)
+
+	// 	// get golang.org/x/sys/unix
+	// 	// this is required to build linux binaries
+	// 	log.Println("Getting golang.org/x/sys/unix ...")
+	// 	if err := exec.Command("go", "get", "golang.org/x/sys/unix").Run(); err != nil {
+	// 		log.Println(yellow("failed to get golang.org/x/sys/unix"))
+	// 		return err
+	// 	}
+
+	// 	splts := strings.Split(crossBuild, " ")
+	// 	buildOptions = append(buildOptions, splts...)
+	// 	buildOptions = append(buildOptions, "go", "build", "-o", binOutputName, "-v")
+	// 	output, err = exec.Command("env", buildOptions...).CombinedOutput()
+	// } else {
+	// 	buildOptions = append(buildOptions, "build", "-o", binOutputName, "-v")
+	// 	output, err = exec.Command("go", buildOptions...).CombinedOutput()
+	// }
 	return nil
 }
