@@ -25,6 +25,7 @@ import (
     protoempty "github.com/golang/protobuf/ptypes/empty"
     "golang.org/x/net/context"
     "google.golang.org/grpc"
+    "google.golang.org/grpc/metadata"
 
     gozip "github.com/straightdave/gozip/lib"
     "github.com/straightdave/lesphina"
@@ -33,7 +34,7 @@ import (
 
 var (
     _les             *lesphina.Lesphina
-    _metaData        *MetaData
+    _renderData      *RenderData
     _hostList        []string
     _regexMethodPath = regexp.MustCompile(`\.Invoke.+?"(.+?)"`)
     _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
@@ -51,9 +52,10 @@ var (
     _json       = flag.Bool("json", false, "response in JSON format")
     _massive    = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
     _data       = flag.String("d", "", "request data")
+    _meta       = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
     _dataFile   = flag.String("df", "", "request data file\nData in the file will be read line by line")
     _loop       = flag.Bool("loop", false, "repeat all requests in loops")
-    _duration   = flag.Duration("duration", 10*time.Second, "execution duration like 10s, 20m")
+    _duration   = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
     _rate       = flag.Uint64("rate", 1, "execution frequency per second")
     _worker     = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
     _dumpToFile = flag.String("dumpto", "", "dump massive call responses to file")
@@ -64,8 +66,8 @@ var _version, _checksum string
 func init() {
     flag.Parse()
     _les = lesphina.Restore(_lesDump)
-    prepHostList()
-    genMetaData()
+    _hostList = parseHostList(*_hosts)
+    genRenderData()
 }
 
 func main() {
@@ -76,7 +78,7 @@ func main() {
 
     if *_ver {
         var svcNames []string
-        for _, svc := range _metaData.Services {
+        for _, svc := range _renderData.Services {
             svcNames = append(svcNames, svc.Name)
         }
         fmt.Printf("Service:\t%s\n", strings.Join(svcNames, ", "))
@@ -91,7 +93,7 @@ func main() {
         serveStaticContent("/m.css", "text/css", gozip.DecompressString(css))
         serveStaticContent("/m.js", "text/javascript", gozip.DecompressString(js))
         http.HandleFunc("/type", handleGetType)
-        http.HandleFunc("/meta", handleGetMeta)
+        http.HandleFunc("/meta", handleGetLesphinaMeta)
         http.HandleFunc("/call", handleCallEndpoint)
         srv := &http.Server{Addr: *_arionHost}
         log.Fatal(srv.ListenAndServe())
@@ -111,31 +113,58 @@ func main() {
     }
 
     if *_endpoint != "" {
+        req := &CallEndpointRequest{
+            Hostlist:     _hostList,
+            Endpoint:     *_endpoint,
+            DataInJSON:   *_data,
+            Metadata:     parseMetadata(*_meta),
+            RespInJSON:   *_json,
+            DataFile:     *_dataFile,
+            IsLoop:       *_loop,
+            DumpFile:     *_dumpToFile,
+            CallDuration: *_duration,
+            Rate:         *_rate,
+            Worker:       *_worker,
+        }
+
         if *_massive {
-            massiveCallEndpoint()
+            req.Massive()
             return
         }
-        res, err := callEndpoint(_hostList[0], *_endpoint, *_data, *_json)
+
+        res, err := req.Call()
         if err != nil {
             fmt.Println("ERROR", err)
             return
         }
         fmt.Println(res)
-        return
     }
 }
 
-func prepHostList() {
-    hosts := strings.Trim(*_hosts, " ,") // trim spaces and commas
-    _hostList = strings.Split(hosts, ",")
-    if len(_hostList) == 0 {
-        _hostList = append(_hostList, ":8087")
+func parseHostList(origin string) []string {
+    origin = strings.Trim(origin, " ,")
+    tmpList := strings.Split(origin, ",")
+    if len(tmpList) == 0 {
+        return []string{":8087"}
     }
+
+    var result []string
+    for _, h := range tmpList {
+        h = strings.Trim(h, " ")
+        indexOfColon := strings.Index(h, ":")
+        if indexOfColon >= 0 {
+            result = append(result, h)
+        } else {
+            // no colon, no port
+            result = append(result, h+":8087")
+        }
+    }
+    return result
 }
 
 func genAndPrintEndpointInfo(raw string) {
     svcName, endName := parseEndpointName(raw)
-    for _, svc := range _metaData.Services {
+    for _, svc := range _renderData.Services {
         if svcName != "" && svc.Name != svcName {
             continue
         }
@@ -158,7 +187,7 @@ func genAndPrintEndpointInfo(raw string) {
 }
 
 func genAndPrintTypeInfo(typeName string) {
-    for _, t := range _metaData.Reference {
+    for _, t := range _renderData.Reference {
         if t.Name == typeName {
             for _, f := range t.Fields {
                 fmt.Printf("- %s %s (json field name: %s)\n", f.Name, f.Type, f.JsonFieldName)
@@ -169,7 +198,7 @@ func genAndPrintTypeInfo(typeName string) {
 }
 
 func genAndPrintOverallInfo() {
-    for _, svc := range _metaData.Services {
+    for _, svc := range _renderData.Services {
         fmt.Println(svc.Name)
         for _, e := range svc.Endpoints {
             fmt.Printf("> %s\n", e.Name)
@@ -196,7 +225,7 @@ func getPort(rawAddress string) string {
     return "9999"
 }
 
-type MetaData struct {
+type RenderData struct {
     ArionVersion string
     ArionPort    string
     TargetHost   string
@@ -226,8 +255,8 @@ type ElementData struct {
     JsonFieldName string
 }
 
-func genMetaData() {
-    _metaData = &MetaData{
+func genRenderData() {
+    _renderData = &RenderData{
         ArionVersion: _version,
         TargetHost:   getFullHost(_hostList[0]),
         ArionPort:    getPort(*_arionHost),
@@ -281,7 +310,7 @@ func genMetaData() {
 
             svcData.Endpoints = append(svcData.Endpoints, endData)
         }
-        _metaData.Services = append(_metaData.Services, svcData)
+        _renderData.Services = append(_renderData.Services, svcData)
     }
 
     rawAllStructs := _les.Query().ByKind(lesphina.KindStruct).All()
@@ -305,7 +334,7 @@ func genMetaData() {
                 JsonFieldName: f.JsonFieldName(),
             })
         }
-        _metaData.Reference = append(_metaData.Reference, structData)
+        _renderData.Reference = append(_renderData.Reference, structData)
     }
 }
 
@@ -316,7 +345,7 @@ func genHtml(raw string) string {
     }
 
     var buf bytes.Buffer
-    if err := t.Execute(&buf, _metaData); err != nil {
+    if err := t.Execute(&buf, _renderData); err != nil {
         panic(err)
     }
     return buf.String()
@@ -355,7 +384,7 @@ func handleGetType(w http.ResponseWriter, r *http.Request) {
     }
 }
 
-func handleGetMeta(w http.ResponseWriter, r *http.Request) {
+func handleGetLesphinaMeta(w http.ResponseWriter, r *http.Request) {
     defer recoverHandling(w)
     io.WriteString(w, _les.Meta.Json())
 }
@@ -399,8 +428,24 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
     }
 
     data := string(body)
-    log.Printf("Call %s on %s with data:\n%s\n", endpointName, hostAddr, data)
-    res, err := callEndpoint(hostAddr, endpointName, data, respInJson)
+
+    // parse grpc metadata in http request header
+    var meta metadata.MD
+    for k, v := range r.Header {
+        if strings.HasPrefix(k, "gmeta-") {
+            realKey := strings.TrimPrefix(k, "gmeta-")
+            meta.Set(realKey, v...) // v is []string
+        }
+    }
+
+    call := &CallEndpointRequest{
+        Hostlist:   []string{hostAddr},
+        Endpoint:   endpointName,
+        DataInJSON: data,
+        Metadata:   meta,
+        RespInJSON: respInJson,
+    }
+    res, err := call.Call()
     if err != nil {
         log.Println("Err:", err.Error())
         io.WriteString(w, err.Error())
@@ -421,78 +466,108 @@ func parseEndpointName(rawName string) (string, string) {
     return svcName, endName
 }
 
-// used in both console and browser modes
-func callEndpoint(host, endpoint, data string, respInJson bool) (res string, err error) {
-    conn, err := grpc.Dial(host, grpc.WithInsecure(),
-        grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
+type CallEndpointRequest struct {
+    Hostlist     []string
+    Endpoint     string
+    DataInJSON   string
+    DataFile     string
+    Metadata     metadata.MD
+    DialTimeout  time.Duration
+    RespInJSON   bool
+    CallDuration time.Duration
+    Rate         uint64
+    Worker       uint64
+    IsLoop       bool
+    DumpFile     string
+}
+
+func (req *CallEndpointRequest) Call() (response string, err error) {
+    max := func(du1, du2 time.Duration) time.Duration {
+        if du1 > du2 {
+            return du1
+        } else {
+            return du2
+        }
+    }
+
+    conn, err := grpc.Dial(
+        req.Hostlist[0],
+        grpc.WithInsecure(),
+        grpc.WithBlock(),
+        grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
+
     if err != nil {
         return
     }
     defer conn.Close()
 
-    svcName, endName := parseEndpointName(endpoint)
+    svcName, endName := parseEndpointName(req.Endpoint)
     method, err := getMethodPath(svcName, endName)
     if err != nil {
         return
     }
 
-    // Need to improve:
-    // Currently treating not-found structure as empty
-    // and ignoring given data
-    // In the future we may improve Lesphina
-    req := getVarByTypeName(endName + "Request")
-    if req == nil {
-        log.Println("WARN request type not found; treating as protobuf.Empty")
-        req = &protoempty.Empty{}
+    reqData := getVarByTypeName(endName + "Request")
+    if reqData == nil {
+        // Need to improve:
+        // Currently treating not-found structure as empty
+        // and ignoring given data
+        // In the future we may improve Lesphina
+        log.Println("WARN request type not found; use protobuf.Empty instead")
+        reqData = &protoempty.Empty{}
     } else {
-        err = jsonpb.UnmarshalString(data, req)
+        err = jsonpb.UnmarshalString(req.DataInJSON, reqData)
         if err != nil {
             return
         }
     }
 
-    reply := getVarByTypeName(endName + "Response")
-    if reply == nil {
+    replyData := getVarByTypeName(endName + "Response")
+    if replyData == nil {
         log.Println("WARN response type not found; treating as protobuf.Empty")
-        reply = &protoempty.Empty{}
+        replyData = &protoempty.Empty{}
     }
 
-    if err = conn.Invoke(context.Background(), method, req, reply); err != nil {
+    ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
+    err = conn.Invoke(ctx, method, reqData, replyData)
+    if err != nil {
         return
     }
 
-    if respInJson {
-        jsonbytes, err := json.MarshalIndent(reply, "", "    ")
+    if req.RespInJSON {
+        jsonbytes, err := json.MarshalIndent(replyData, "", "    ")
         if err != nil {
             return "", err
         }
-        res = string(jsonbytes)
+        response = string(jsonbytes)
     } else {
-        res = reply.String()
+        response = replyData.String()
     }
     return
 }
 
-func massiveCallEndpoint() {
-    fmt.Printf("Massive Call on %s...\n", *_endpoint)
+func (req *CallEndpointRequest) Massive() {
+    fmt.Printf("Massive Call on %s...\n", req.Endpoint)
 
     var target *trunks.Gtarget
-    if *_dataFile != "" {
+    if req.DataFile != "" {
         target = prepMultipleReqTarget()
-    } else if *_data != "" {
+    } else if req.DataInJSON != "" {
         target = prepSingleReqTarget()
     } else {
         fmt.Println("Please specify either -d or -df")
         return
     }
 
-    fmt.Println("Max workers:", *_worker)
+    fmt.Println("Max workers:", req.Worker)
 
-    burner, err := trunks.NewBurner(_hostList,
-        trunks.WithLooping(*_loop),
-        trunks.WithNumWorker(*_worker),
-        trunks.WithDumpFile(*_dumpToFile),
-    )
+    burner, err := trunks.NewBurner(
+        req.Hostlist,
+        trunks.WithLooping(req.IsLoop),
+        trunks.WithNumWorker(req.Worker),
+        trunks.WithDumpFile(req.DumpFile),
+        trunks.WithMetadata(req.Metadata))
+
     if err != nil {
         panic(err)
     }
@@ -501,13 +576,12 @@ func massiveCallEndpoint() {
     fmt.Println("Start at", time.Now().Format(time.UnixDate))
     var metrics trunks.Metrics
     startT := time.Now()
-    for res := range burner.Burn(target, *_rate, *_duration) {
+    for res := range burner.Burn(target, req.Rate, req.CallDuration) {
         metrics.Add(res)
     }
     dur := time.Since(startT)
     metrics.Close()
 
-    // possibly dump the response
     if err := burner.WaitDumpDone(); err != nil {
         fmt.Printf("WARN: failed to dump response to file: %v\n", err)
     }
@@ -758,4 +832,21 @@ func genUniqueData(rawValue string, amount uint64) []string {
         result = append(result, tempStr)
     }
     return result
+}
+
+func parseMetadata(origin string) metadata.MD {
+    md := make(metadata.MD)
+    if origin != "" {
+        for _, s := range strings.Split(origin, " ") {
+            s = strings.Trim(s, " ")
+            if s == "" {
+                continue
+            }
+            i := strings.Index(s, "=")
+            if i >= 0 {
+                md.Append(s[:i], s[i+1:])
+            }
+        }
+    }
+    return md
 }
