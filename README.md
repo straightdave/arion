@@ -15,7 +15,7 @@ Arion is a tool to test gRPC service. Arion is able to:
 - Do performance test for gRPC services
 
 ## Get Arion
-```bash
+```
 $ go get -u github.com/straightdave/arion
 ```
 
@@ -26,8 +26,6 @@ $ go get -u github.com/straightdave/arion
 ```
 $ arion -h
 Usage of arion:
-  -c  to clear temp folder after Postgal is generated
-      *NOTE*: use -o to generate Postgal out of temp folder
   -cross string
       Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'
   -l  list Postgals in current folder or all ./temp* folders
@@ -113,7 +111,7 @@ Usage of postgal:
   -dumpto string
       dump massive call responses to file
   -duration duration
-      execution duration like 10s, 20m (default 10s)
+      execution duration: 10s, 20m (default 10s)
   -e string
       endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
   -h string
@@ -123,6 +121,8 @@ Usage of postgal:
       response in JSON format
   -loop
       repeat all requests in loops
+  -meta string
+      gRPC metadata (format: 'key1=value1 key2=value2')
   -rate uint
       execution frequency per second (default 1)
   -serve
@@ -191,6 +191,11 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
 }
 ```
 
+You can use `-meta` to add metadata to the gRPC call:
+```
+$ ./postgal -e Hello -d '{"Name":"dave"}' -meta 'k1=v1 k2=v2 k1=v3'
+```
+
 ### Performance test
 
 #### 1. to execute performance tests against one endpoint:
@@ -203,6 +208,7 @@ Massive Call...
 > **NOTE**
 > * Again, if omit `-h` option, the default target host is `0.0.0.0:8087`
 > * If only `-x` is specified, it implies `-rate 1 -duration 10s` by default
+> * `-meta` is still available in massive gRPC call; However we only use one set of metadata for all requests. If needed, I'll add this functionality to call with multiple metadata sets.
 
 #### 2. data file
 You can use `-df` to specify a data file which consists of multiple request data (each in one line) to conduct the massive call:
