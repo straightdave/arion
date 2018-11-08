@@ -31,6 +31,7 @@ var (
 	fListPostgals = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
 	fCrossBuild   = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
 	fVerbose      = flag.Bool("verbose", false, "print verbose information when building postgals")
+	fDebug        = flag.Bool("debug", false, "debug mode")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
 
@@ -292,6 +293,8 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		return err
 	}
 
+	debug("deps => %+v", deps)
+
 	log.Printf("Install dependencies ...")
 	cmdToGetDep := &asyncexec.AsyncExec{
 		Name: "go",
@@ -348,4 +351,10 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		return err
 	}
 	return nil
+}
+
+func debug(format string, args ...interface{}) {
+	if *fDebug {
+		fmt.Printf(yellow("[debug] ")+format, args...)
+	}
 }
