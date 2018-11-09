@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/straightdave/arion/lib"
 	"github.com/straightdave/arion/lib/asyncexec"
 	gozip "github.com/straightdave/gozip/lib"
 	"github.com/straightdave/lesphina"
@@ -288,7 +287,7 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}()
 
 	log.Printf("Analyzing dependencies ...")
-	deps, err := lib.ListDepsOfCurrentPackage()
+	deps, err := listDepsOfCurrentPackage()
 	if err != nil {
 		return err
 	}
@@ -351,6 +350,32 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		return err
 	}
 	return nil
+}
+
+func listDepsOfCurrentPackage() ([]string, error) {
+	raw := `go list -f '{{join .Imports "\n"}}' | xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}'`
+
+	cmd := &asyncexec.AsyncExec{
+		Name: "bash",
+		Args: []string{"-c", raw},
+	}
+
+	if err := cmd.StartWithTimeout(10 * time.Second); err != nil {
+		return nil, err
+	}
+
+	if *fDebug {
+		fmt.Println("[debug] stdout")
+		for _, l := range cmd.Stdout {
+			fmt.Println(l)
+		}
+
+		fmt.Println("[debug] stderr")
+		for _, l := range cmd.Stderr {
+			fmt.Println(l)
+		}
+	}
+	return cmd.Stdout, nil
 }
 
 func debug(format string, args ...interface{}) {

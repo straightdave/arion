@@ -27,6 +27,8 @@ type AsyncExec struct {
 	Args      []string
 	Env       map[string]string
 	EndAction func() error
+	Stdout    []string
+	Stderr    []string
 
 	// internal use
 	complete chan struct{}
@@ -82,14 +84,18 @@ func (ae *AsyncExec) Start() error {
 		go func() {
 			defer ifPanic(nil)
 			for scanner.Scan() {
-				fmt.Println(green("stdout"), scanner.Text())
+				l := scanner.Text()
+				ae.Stdout = append(ae.Stdout, l)
+				fmt.Println(green("stdout"), l)
 			}
 		}()
 
 		go func() {
 			defer ifPanic(nil)
 			for scannerErr.Scan() {
-				fmt.Println(yellow("stderr"), scannerErr.Text())
+				l := scannerErr.Text()
+				ae.Stderr = append(ae.Stderr, l)
+				fmt.Println(yellow("stderr"), l)
 			}
 		}()
 

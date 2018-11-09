@@ -41,4 +41,15 @@ func TestStartWithTimeout(t *testing.T) {
 
 	// blocking version
 	cmd.StartWithTimeout(10 * time.Second)
+
+	if len(cmd.Stdout) == 0 {
+		t.FailNow()
+	}
+
+	// verify stdout
+	fmt.Println("===> print Stdout")
+
+	for _, l := range cmd.Stdout {
+		fmt.Println(l)
+	}
 }
