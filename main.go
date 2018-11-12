@@ -287,12 +287,12 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}()
 
 	log.Printf("Analyzing dependencies ...")
-	deps, err := listDepsOfCurrentPackage()
+	deps, err := listDepsOfCurrentPackage2()
 	if err != nil {
 		return err
 	}
 
-	debug("deps => %+v", deps)
+	debug("deps => %+v\n", deps)
 
 	log.Printf("Install dependencies ...")
 	cmdToGetDep := &asyncexec.AsyncExec{
@@ -337,7 +337,7 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 		log.Println("Get golang.org/x/sys/unix ...")
 		c := &asyncexec.AsyncExec{
 			Name: "go",
-			Args: []string{"get", "golang.org/x/sys/unix"},
+			Args: []string{"get", "-d", "golang.org/x/sys/unix"},
 		}
 		if err := c.StartWithTimeout(60 * time.Second); err != nil {
 			return err
@@ -376,6 +376,38 @@ func listDepsOfCurrentPackage() ([]string, error) {
 		}
 	}
 	return cmd.Stdout, nil
+}
+
+func listDepsOfCurrentPackage2() ([]string, error) {
+	cdir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := ioutil.ReadDir(cdir)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []string
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".go") {
+			l, err := lesphina.Read(f.Name())
+			if err != nil {
+				return nil, err
+			}
+
+			for _, i := range l.Meta.Imports {
+				path := strings.Trim(i.Name, ` "`)
+				spl := strings.Split(path, `/`)
+				if len(spl) > 1 && strings.Contains(spl[0], `.`) {
+					// possibly a non-built-in packages
+					res = append(res, path)
+				}
+			}
+		}
+	}
+	return res, nil
 }
 
 func debug(format string, args ...interface{}) {
