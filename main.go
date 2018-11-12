@@ -389,11 +389,13 @@ func listDepsOfCurrentPackage2() ([]string, error) {
 		return nil, err
 	}
 
-	var res []string
+	resMap := make(map[string]bool)
 	for _, f := range files {
+		debug("analyzing file: %s\n", f.Name())
 		if !f.IsDir() && strings.HasSuffix(f.Name(), ".go") {
 			l, err := lesphina.Read(f.Name())
 			if err != nil {
+				debug("failed to analyze file: %s\n", f.Name())
 				return nil, err
 			}
 
@@ -402,10 +404,16 @@ func listDepsOfCurrentPackage2() ([]string, error) {
 				spl := strings.Split(path, `/`)
 				if len(spl) > 1 && strings.Contains(spl[0], `.`) {
 					// possibly a non-built-in packages
-					res = append(res, path)
+					debug("dep: %v\n", path)
+					resMap[path] = true
 				}
 			}
 		}
+	}
+
+	var res []string
+	for key := range resMap {
+		res = append(res, key)
 	}
 	return res, nil
 }
