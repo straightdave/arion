@@ -36,29 +36,31 @@ var (
 	_les             *lesphina.Lesphina
 	_renderData      *RenderData
 	_hostList        []string
-	_regexMethodPath = regexp.MustCompile(`\.Invoke.+?"(.+?)"`)
+	_regexMethodPath = regexp.MustCompile(`\.[Invoke|NewStream].+?"(.+?)"`)
 	_regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
 	_regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
 
 	// flags
-	_ver        = flag.Bool("v", false, "print version info")
-	_debug      = flag.Bool("debug", false, "print some debug info (for dev purpose)")
-	_serve      = flag.Bool("serve", false, "use PostGal in browser mode")
-	_arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
-	_info       = flag.Bool("i", false, "show info")
-	_type       = flag.String("t", "", "data type name")
-	_hosts      = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
-	_endpoint   = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
-	_json       = flag.Bool("json", false, "response in JSON format")
-	_massive    = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
-	_data       = flag.String("d", "", "request data")
-	_meta       = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
-	_dataFile   = flag.String("df", "", "request data file\nData in the file will be read line by line")
-	_loop       = flag.Bool("loop", false, "repeat all requests in loops")
-	_duration   = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
-	_rate       = flag.Uint64("rate", 1, "execution frequency per second")
-	_worker     = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
-	_dumpToFile = flag.String("dumpto", "", "dump massive call responses to file")
+	_ver            = flag.Bool("v", false, "print version info")
+	_debug          = flag.Bool("debug", false, "print some debug info (for dev purpose)")
+	_serve          = flag.Bool("serve", false, "use PostGal in browser mode")
+	_arionHost      = flag.String("at", ":9999", "address to host PostGal in browser mode")
+	_info           = flag.Bool("i", false, "show info")
+	_type           = flag.String("t", "", "data type name")
+	_hosts          = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
+	_endpoint       = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+	_json           = flag.Bool("json", false, "response in JSON format")
+	_massive        = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
+	_data           = flag.String("d", "", "request data")
+	_meta           = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
+	_isStreaming    = flag.Bool("s", false, "is streaming (now supporting client-side streaming)")
+	_streamingTimes = flag.Uint("n", 10, "how many times to send streaming msg to server")
+	_dataFile       = flag.String("df", "", "request data file\nData in the file will be read line by line")
+	_loop           = flag.Bool("loop", false, "repeat all requests in loops")
+	_duration       = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
+	_rate           = flag.Uint64("rate", 1, "execution frequency per second")
+	_worker         = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
+	_dumpToFile     = flag.String("dumpto", "", "dump massive call responses to file")
 )
 
 var _version, _checksum string
@@ -114,17 +116,19 @@ func main() {
 
 	if *_endpoint != "" {
 		req := &CallEndpointRequest{
-			Hostlist:     _hostList,
-			Endpoint:     *_endpoint,
-			DataInJSON:   *_data,
-			Metadata:     parseMetadata(*_meta),
-			RespInJSON:   *_json,
-			DataFile:     *_dataFile,
-			IsLoop:       *_loop,
-			DumpFile:     *_dumpToFile,
-			CallDuration: *_duration,
-			Rate:         *_rate,
-			Worker:       *_worker,
+			Hostlist:       _hostList,
+			Endpoint:       *_endpoint,
+			DataInJSON:     *_data,
+			Metadata:       parseMetadata(*_meta),
+			IsStreaming:    *_isStreaming,
+			StreamingTimes: *_streamingTimes,
+			RespInJSON:     *_json,
+			DataFile:       *_dataFile,
+			IsLoop:         *_loop,
+			DumpFile:       *_dumpToFile,
+			CallDuration:   *_duration,
+			Rate:           *_rate,
+			Worker:         *_worker,
 		}
 
 		if *_massive {
@@ -282,6 +286,11 @@ func genRenderData() {
 			}
 
 			for _, p := range m.InParams() {
+				lowerType := strings.ToLower(p.BaseType)
+				if strings.Contains(lowerType, "context") || strings.Contains(lowerType, "option") {
+					continue
+				}
+
 				// Unary
 				if p.IsPointer && p.Name == "in" {
 					endData.ReqType = p.BaseType
@@ -304,8 +313,7 @@ func genRenderData() {
 					return
 				}
 
-				// client-side/bi-dir streaming
-
+				// Will check response parameters for streaming req/resp parameter types
 			}
 
 			for _, p := range m.OutParams() {
@@ -331,7 +339,62 @@ func genRenderData() {
 					return
 				}
 
-				// streaming
+				// streaming (client-side or bi-dir) naming in the pattern of 'xxxx_xxxxClient'
+				if strings.HasSuffix(p.BaseType, "Client") {
+					o := _les.Query().ByKind(lesphina.KindInterface).ByName(p.BaseType).First()
+					if o == nil {
+						fmt.Printf("ERR: Cannot find the interface:%s\n", p.BaseType)
+						return
+					}
+
+					if oi, ok := o.(*lesphina.Interface); ok {
+						for _, m := range oi.Methods {
+
+							// NOTE: relies heavily on grpc protoc naming
+							// to collect request entity
+							if m.Name == "Send" && len(m.In) > 0 {
+								endData.ReqType = m.In[0].BaseType
+
+								reqT := _les.Query().ByKind(lesphina.KindStruct).ByName(endData.ReqType).First()
+								if reqT == nil {
+									fmt.Printf("ERR: Cannot find the struct:%s\n", endData.ReqType)
+									return
+								}
+
+								if t, ok := reqT.(*lesphina.Struct); ok {
+									for _, f := range t.Fields {
+										endData.ReqElements = append(endData.ReqElements, ElementData{
+											Name:          f.Name,
+											Type:          f.BaseType,
+											JsonFieldName: f.JsonFieldName(),
+										})
+									}
+								}
+							}
+
+							// to collect response entity
+							if strings.Contains(strings.ToLower(m.Name), "recv") && len(m.Out) > 0 {
+								endData.RespType = m.Out[0].BaseType
+
+								respT := _les.Query().ByKind(lesphina.KindStruct).ByName(endData.RespType).First()
+								if respT == nil {
+									fmt.Printf("ERR: Cannot find the struct:%s\n", endData.RespType)
+									return
+								}
+
+								if t, ok := respT.(*lesphina.Struct); ok {
+									for _, f := range t.Fields {
+										endData.RespElements = append(endData.RespElements, ElementData{
+											Name:          f.Name,
+											Type:          f.BaseType,
+											JsonFieldName: f.JsonFieldName(),
+										})
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 
 			svcData.Endpoints = append(svcData.Endpoints, endData)
@@ -493,18 +556,20 @@ func parseEndpointName(rawName string) (string, string) {
 }
 
 type CallEndpointRequest struct {
-	Hostlist     []string
-	Endpoint     string
-	DataInJSON   string
-	DataFile     string
-	Metadata     metadata.MD
-	DialTimeout  time.Duration
-	RespInJSON   bool
-	CallDuration time.Duration
-	Rate         uint64
-	Worker       uint64
-	IsLoop       bool
-	DumpFile     string
+	Hostlist       []string
+	Endpoint       string
+	DataInJSON     string
+	DataFile       string
+	Metadata       metadata.MD
+	DialTimeout    time.Duration
+	IsStreaming    bool
+	StreamingTimes uint
+	RespInJSON     bool
+	CallDuration   time.Duration
+	Rate           uint64
+	Worker         uint64
+	IsLoop         bool
+	DumpFile       string
 }
 
 func (req *CallEndpointRequest) Call() (response string, err error) {
@@ -582,14 +647,47 @@ outter:
 	}
 
 	ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
-	err = conn.Invoke(ctx, method, reqData, replyData)
-	if err != nil {
-		return
+
+	if req.IsStreaming {
+		desc := &grpc.StreamDesc{
+			ClientStreams: true,
+		}
+
+		stream, err := conn.NewStream(ctx, desc, method)
+		if err != nil {
+			fmt.Printf("ERR: cannot create Stream: %v\n", err)
+			return "", err
+		}
+
+		for i := uint(0); i < req.StreamingTimes; i++ {
+			if err := stream.SendMsg(reqData); err != nil {
+				fmt.Printf("ERR: failed to send streaming msg: %v\n", err)
+				return "", err
+			}
+		}
+
+		if err := stream.CloseSend(); err != nil {
+			fmt.Printf("ERR: failed to close sending streaming msg: %v\n", err)
+			return "", err
+		}
+
+		if err := stream.RecvMsg(replyData); err != nil {
+			fmt.Printf("ERR: failed to receive streaming response: %v\n", err)
+			return "", err
+		}
+
+	} else {
+		err = conn.Invoke(ctx, method, reqData, replyData)
+		if err != nil {
+			fmt.Printf("ERR: failed to invoke unary request: %v\n", err)
+			return
+		}
 	}
 
 	if req.RespInJSON {
 		jsonbytes, err := json.MarshalIndent(replyData, "", "    ")
 		if err != nil {
+			fmt.Printf("ERR: failed to marshal response: %v\n", err)
 			return "", err
 		}
 		response = string(jsonbytes)
@@ -769,6 +867,8 @@ func getMethodPath(svcName, endName string) (res string, err error) {
 		return "", fmt.Errorf("No function found by name: %s", endName)
 	}
 
+	// fmt.Println("DEBUG: method found:", len(qCandidates))
+
 	var target *lesphina.Function
 	for _, c := range qCandidates {
 		if f, ok := c.(*lesphina.Function); ok {
@@ -783,7 +883,7 @@ func getMethodPath(svcName, endName string) (res string, err error) {
 
 			if svcName != "" {
 				// if svcName is given, return the first candidate under this svc
-				if strings.ToLower(f.Recv[0].BaseType) == strings.ToLower(svcName) {
+				if strings.Contains(strings.ToLower(f.Recv[0].BaseType), strings.ToLower(svcName)) {
 					target = f
 					break
 				}
@@ -806,8 +906,10 @@ func getMethodPath(svcName, endName string) (res string, err error) {
 
 	m := _regexMethodPath.FindAllStringSubmatch(rawBody, 1)
 	if len(m) > 0 && len(m[0]) > 1 {
+		// fmt.Println("DEBUG: grpc method:", m[0][1])
 		return m[0][1], nil
 	}
+
 	return "", fmt.Errorf("No match in rawBody")
 }
 
