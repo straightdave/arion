@@ -51,8 +51,11 @@ func main() {
 	}
 
 	baseName := filepath.Base(*fSourceFile)
-	baseName = strings.TrimSuffix(baseName, ".go")
-	baseName = strings.TrimSuffix(baseName, ".pb")
+	indexOfDot := strings.Index(baseName, ".")
+	if indexOfDot > 0 {
+		baseName = baseName[:indexOfDot]
+	}
+
 	tmpDir, err := ioutil.TempDir(".", "temp-"+baseName+"-")
 	if err != nil {
 		log.Fatalln("cannot create temp dir:", err.Error())

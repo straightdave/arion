@@ -4,849 +4,875 @@
 package main
 
 import (
-    "bytes"
-    "encoding/json"
-    "flag"
-    "fmt"
-    "io"
-    "io/ioutil"
-    "log"
-    "net/http"
-    "net/url"
-    "os"
-    "regexp"
-    "strconv"
-    "strings"
-    "text/template"
-    "time"
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+	"text/template"
+	"time"
 
-    "github.com/golang/protobuf/jsonpb"
-    "github.com/golang/protobuf/proto"
-    protoempty "github.com/golang/protobuf/ptypes/empty"
-    "golang.org/x/net/context"
-    "google.golang.org/grpc"
-    "google.golang.org/grpc/metadata"
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	protoempty "github.com/golang/protobuf/ptypes/empty"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
-    gozip "github.com/straightdave/gozip/lib"
-    "github.com/straightdave/lesphina"
-    trunks "github.com/straightdave/trunks/lib"
+	gozip "github.com/straightdave/gozip/lib"
+	"github.com/straightdave/lesphina"
+	trunks "github.com/straightdave/trunks/lib"
 )
 
 var (
-    _les             *lesphina.Lesphina
-    _renderData      *RenderData
-    _hostList        []string
-    _regexMethodPath = regexp.MustCompile(`\.Invoke.+?"(.+?)"`)
-    _regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
-    _regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
+	_les             *lesphina.Lesphina
+	_renderData      *RenderData
+	_hostList        []string
+	_regexMethodPath = regexp.MustCompile(`\.Invoke.+?"(.+?)"`)
+	_regexDurFormat  = regexp.MustCompile(`\d+[sm]`)
+	_regexDataMark   = regexp.MustCompile(`(?im)<<arion:(\w*?):(.*?)>>`)
 
-    // flags
-    _ver        = flag.Bool("v", false, "print version info")
-    _debug      = flag.Bool("debug", false, "print some debug info (for dev purpose)")
-    _serve      = flag.Bool("serve", false, "use PostGal in browser mode")
-    _arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
-    _info       = flag.Bool("i", false, "show info")
-    _type       = flag.String("t", "", "data type name")
-    _hosts      = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
-    _endpoint   = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
-    _json       = flag.Bool("json", false, "response in JSON format")
-    _massive    = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
-    _data       = flag.String("d", "", "request data")
-    _meta       = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
-    _dataFile   = flag.String("df", "", "request data file\nData in the file will be read line by line")
-    _loop       = flag.Bool("loop", false, "repeat all requests in loops")
-    _duration   = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
-    _rate       = flag.Uint64("rate", 1, "execution frequency per second")
-    _worker     = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
-    _dumpToFile = flag.String("dumpto", "", "dump massive call responses to file")
+	// flags
+	_ver        = flag.Bool("v", false, "print version info")
+	_debug      = flag.Bool("debug", false, "print some debug info (for dev purpose)")
+	_serve      = flag.Bool("serve", false, "use PostGal in browser mode")
+	_arionHost  = flag.String("at", ":9999", "address to host PostGal in browser mode")
+	_info       = flag.Bool("i", false, "show info")
+	_type       = flag.String("t", "", "data type name")
+	_hosts      = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
+	_endpoint   = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
+	_json       = flag.Bool("json", false, "response in JSON format")
+	_massive    = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
+	_data       = flag.String("d", "", "request data")
+	_meta       = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
+	_dataFile   = flag.String("df", "", "request data file\nData in the file will be read line by line")
+	_loop       = flag.Bool("loop", false, "repeat all requests in loops")
+	_duration   = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
+	_rate       = flag.Uint64("rate", 1, "execution frequency per second")
+	_worker     = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
+	_dumpToFile = flag.String("dumpto", "", "dump massive call responses to file")
 )
 
 var _version, _checksum string
 
 func init() {
-    flag.Parse()
-    _les = lesphina.Restore(_lesDump)
-    _hostList = parseHostList(*_hosts)
-    genRenderData()
+	flag.Parse()
+	_les = lesphina.Restore(_lesDump)
+	_hostList = parseHostList(*_hosts)
+	genRenderData()
 }
 
 func main() {
-    if len(os.Args) == 1 {
-        flag.PrintDefaults()
-        return
-    }
+	if len(os.Args) == 1 {
+		flag.PrintDefaults()
+		return
+	}
 
-    if *_ver {
-        var svcNames []string
-        for _, svc := range _renderData.Services {
-            svcNames = append(svcNames, svc.Name)
-        }
-        fmt.Printf("Service:\t%s\n", strings.Join(svcNames, ", "))
-        fmt.Printf("Generated:\t%s\n", _version)
-        fmt.Printf("Checksum:\t%s\n", _checksum)
-        return
-    }
+	if *_ver {
+		var svcNames []string
+		for _, svc := range _renderData.Services {
+			svcNames = append(svcNames, svc.Name)
+		}
+		fmt.Printf("Service:\t%s\n", strings.Join(svcNames, ", "))
+		fmt.Printf("Generated:\t%s\n", _version)
+		fmt.Printf("Checksum:\t%s\n", _checksum)
+		return
+	}
 
-    if *_serve {
-        realHtml := genHtml(gozip.DecompressString(html2))
-        serveStaticContent("/", "text/html", realHtml)
-        serveStaticContent("/m.css", "text/css", gozip.DecompressString(css))
-        serveStaticContent("/m.js", "text/javascript", gozip.DecompressString(js))
-        http.HandleFunc("/type", handleGetType)
-        http.HandleFunc("/meta", handleGetLesphinaMeta)
-        http.HandleFunc("/call", handleCallEndpoint)
-        srv := &http.Server{Addr: *_arionHost}
-        log.Fatal(srv.ListenAndServe())
-    }
+	if *_serve {
+		realHtml := genHtml(gozip.DecompressString(html2))
+		serveStaticContent("/", "text/html", realHtml)
+		serveStaticContent("/m.css", "text/css", gozip.DecompressString(css))
+		serveStaticContent("/m.js", "text/javascript", gozip.DecompressString(js))
+		http.HandleFunc("/type", handleGetType)
+		http.HandleFunc("/meta", handleGetLesphinaMeta)
+		http.HandleFunc("/call", handleCallEndpoint)
+		srv := &http.Server{Addr: *_arionHost}
+		log.Fatal(srv.ListenAndServe())
+	}
 
-    if *_info {
-        if *_endpoint != "" {
-            genAndPrintEndpointInfo(*_endpoint)
-            return
-        }
-        if *_type != "" {
-            genAndPrintTypeInfo(*_type)
-            return
-        }
-        genAndPrintOverallInfo()
-        return
-    }
+	if *_info {
+		if *_endpoint != "" {
+			genAndPrintEndpointInfo(*_endpoint)
+			return
+		}
+		if *_type != "" {
+			genAndPrintTypeInfo(*_type)
+			return
+		}
+		genAndPrintOverallInfo()
+		return
+	}
 
-    if *_endpoint != "" {
-        req := &CallEndpointRequest{
-            Hostlist:     _hostList,
-            Endpoint:     *_endpoint,
-            DataInJSON:   *_data,
-            Metadata:     parseMetadata(*_meta),
-            RespInJSON:   *_json,
-            DataFile:     *_dataFile,
-            IsLoop:       *_loop,
-            DumpFile:     *_dumpToFile,
-            CallDuration: *_duration,
-            Rate:         *_rate,
-            Worker:       *_worker,
-        }
+	if *_endpoint != "" {
+		req := &CallEndpointRequest{
+			Hostlist:     _hostList,
+			Endpoint:     *_endpoint,
+			DataInJSON:   *_data,
+			Metadata:     parseMetadata(*_meta),
+			RespInJSON:   *_json,
+			DataFile:     *_dataFile,
+			IsLoop:       *_loop,
+			DumpFile:     *_dumpToFile,
+			CallDuration: *_duration,
+			Rate:         *_rate,
+			Worker:       *_worker,
+		}
 
-        if *_massive {
-            req.Massive()
-            return
-        }
+		if *_massive {
+			req.Massive()
+			return
+		}
 
-        res, err := req.Call()
-        if err != nil {
-            fmt.Println("ERROR", err)
-            return
-        }
-        fmt.Println(res)
-    }
+		res, err := req.Call()
+		if err != nil {
+			fmt.Println("ERROR", err)
+			return
+		}
+		fmt.Println(res)
+	}
 }
 
 func parseHostList(origin string) []string {
-    origin = strings.Trim(origin, " ,")
-    tmpList := strings.Split(origin, ",")
-    if len(tmpList) == 0 {
-        return []string{":8087"}
-    }
+	origin = strings.Trim(origin, " ,")
+	tmpList := strings.Split(origin, ",")
+	if len(tmpList) == 0 {
+		return []string{":8087"}
+	}
 
-    var result []string
-    for _, h := range tmpList {
-        h = strings.Trim(h, " ")
-        indexOfColon := strings.Index(h, ":")
-        if indexOfColon >= 0 {
-            result = append(result, h)
-        } else {
-            // no colon, no port
-            result = append(result, h+":8087")
-        }
-    }
-    return result
+	var result []string
+	for _, h := range tmpList {
+		h = strings.Trim(h, " ")
+		indexOfColon := strings.Index(h, ":")
+		if indexOfColon >= 0 {
+			result = append(result, h)
+		} else {
+			// no colon, no port
+			result = append(result, h+":8087")
+		}
+	}
+	return result
 }
 
 func genAndPrintEndpointInfo(raw string) {
-    svcName, endName := parseEndpointName(raw)
-    for _, svc := range _renderData.Services {
-        if svcName != "" && svc.Name != svcName {
-            continue
-        }
+	svcName, endName := parseEndpointName(raw)
+	for _, svc := range _renderData.Services {
+		if svcName != "" && svc.Name != svcName {
+			continue
+		}
 
-        for _, end := range svc.Endpoints {
-            if end.Name == endName {
-                fmt.Printf("%s#%s\n", svc.Name, end.Name)
-                fmt.Println("- Request entity:")
-                for _, req := range end.ReqElements {
-                    fmt.Printf("--- %s %s (json field name: %s)\n", req.Name, req.Type, req.JsonFieldName)
-                }
-                fmt.Println("- Response entity:")
-                for _, res := range end.RespElements {
-                    fmt.Printf("--- %s %s (json field name: %s)\n", res.Name, res.Type, res.JsonFieldName)
-                }
-                break
-            }
-        }
-    }
+		for _, end := range svc.Endpoints {
+			if end.Name == endName {
+				fmt.Printf("%s#%s\n", svc.Name, end.Name)
+				fmt.Println("- Request entity:", end.ReqType)
+				for _, req := range end.ReqElements {
+					fmt.Printf("--- %s %s (json field name: %s)\n", req.Name, req.Type, req.JsonFieldName)
+				}
+				fmt.Println("- Response entity:", end.RespType)
+				for _, res := range end.RespElements {
+					fmt.Printf("--- %s %s (json field name: %s)\n", res.Name, res.Type, res.JsonFieldName)
+				}
+				break
+			}
+		}
+	}
 }
 
 func genAndPrintTypeInfo(typeName string) {
-    for _, t := range _renderData.Reference {
-        if t.Name == typeName {
-            for _, f := range t.Fields {
-                fmt.Printf("- %s %s (json field name: %s)\n", f.Name, f.Type, f.JsonFieldName)
-            }
-            break
-        }
-    }
+	for _, t := range _renderData.Reference {
+		if t.Name == typeName {
+			for _, f := range t.Fields {
+				fmt.Printf("- %s %s (json field name: %s)\n", f.Name, f.Type, f.JsonFieldName)
+			}
+			break
+		}
+	}
 }
 
 func genAndPrintOverallInfo() {
-    for _, svc := range _renderData.Services {
-        fmt.Println(svc.Name)
-        for _, e := range svc.Endpoints {
-            fmt.Printf("> %s\n", e.Name)
-        }
-    }
+	for _, svc := range _renderData.Services {
+		fmt.Println(svc.Name)
+		for _, e := range svc.Endpoints {
+			fmt.Printf("> %s\n", e.Name)
+		}
+	}
 }
 
 func getFullHost(raw string) string {
-    if strings.HasPrefix(raw, ":") {
-        return "0.0.0.0" + raw
-    }
-    return raw
+	if strings.HasPrefix(raw, ":") {
+		return "0.0.0.0" + raw
+	}
+	return raw
 }
 
 func getPort(rawAddress string) string {
-    splits := strings.Split(rawAddress, ":")
-    if len(splits) >= 2 {
-        last := splits[len(splits)-1]
-        last = strings.TrimSpace(last)
-        if last != "" {
-            return last
-        }
-    }
-    return "9999"
+	splits := strings.Split(rawAddress, ":")
+	if len(splits) >= 2 {
+		last := splits[len(splits)-1]
+		last = strings.TrimSpace(last)
+		if last != "" {
+			return last
+		}
+	}
+	return "9999"
 }
 
 type RenderData struct {
-    ArionVersion string
-    ArionPort    string
-    TargetHost   string
-    Services     []ServiceData
-    Reference    []Struct
+	ArionVersion string
+	ArionPort    string
+	TargetHost   string
+	Services     []ServiceData
+	Reference    []Struct
 }
 
 type Struct struct {
-    Name   string
-    Fields []ElementData
+	Name   string
+	Fields []ElementData
 }
 
 type ServiceData struct {
-    Name      string
-    Endpoints []EndpointData
+	Name      string
+	Endpoints []EndpointData
 }
 
 type EndpointData struct {
-    Name         string
-    ReqElements  []ElementData
-    RespElements []ElementData
+	Name         string
+	ReqType      string
+	ReqElements  []ElementData
+	RespType     string
+	RespElements []ElementData
 }
 
 type ElementData struct {
-    Name          string
-    Type          string
-    JsonFieldName string
+	Name          string
+	Type          string
+	JsonFieldName string
 }
 
 func genRenderData() {
-    _renderData = &RenderData{
-        ArionVersion: _version,
-        TargetHost:   getFullHost(_hostList[0]),
-        ArionPort:    getPort(*_arionHost),
-    }
+	_renderData = &RenderData{
+		ArionVersion: _version,
+		TargetHost:   getFullHost(_hostList[0]),
+		ArionPort:    getPort(*_arionHost),
+	}
 
-    rawInterfaces := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
-    for _, intf := range rawInterfaces {
-        svc, ok := intf.(*lesphina.Interface)
-        if !ok {
-            fmt.Println("the obj found is not interface, weird")
-            continue
-        }
+	rawInterfaces := _les.Query().ByKind(lesphina.KindInterface).ByName("~Client").All()
+	for _, intf := range rawInterfaces {
+		svc, ok := intf.(*lesphina.Interface)
+		if !ok {
+			fmt.Printf("WARN: the obj [%+v] found is not interface, weird\n", intf)
+			continue
+		}
 
-        svcData := ServiceData{
-            Name: strings.TrimSuffix(svc.GetName(), "Client"),
-        }
+		svcData := ServiceData{
+			Name: strings.TrimSuffix(svc.GetName(), "Client"),
+		}
 
-        // each endpoint
-        for _, m := range svc.Methods {
-            endData := EndpointData{
-                Name: m.GetName(),
-            }
+		for _, m := range svc.Methods {
+			endData := EndpointData{
+				Name: m.GetName(),
+			}
 
-            // get endpoint's req struct fields
-            reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Request").First()
-            if reqstru != nil {
-                if st, ok := reqstru.(*lesphina.Struct); ok {
-                    for _, f := range st.Fields {
-                        endData.ReqElements = append(endData.ReqElements, ElementData{
-                            Name:          f.Name,
-                            Type:          f.RawType,
-                            JsonFieldName: f.JsonFieldName(),
-                        })
-                    }
-                }
-            }
+			for _, p := range m.InParams() {
+				// Unary
+				if p.IsPointer && p.Name == "in" {
+					endData.ReqType = p.BaseType
+					reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(p.BaseType).First()
+					if reqstru == nil {
+						fmt.Printf("ERR: Cannot find the entity in lesphina cache with name:in and type:%s\n", p.BaseType)
+						return
+					}
+					if st, ok := reqstru.(*lesphina.Struct); ok {
+						for _, f := range st.Fields {
+							endData.ReqElements = append(endData.ReqElements, ElementData{
+								Name:          f.Name,
+								Type:          f.BaseType,
+								JsonFieldName: f.JsonFieldName(),
+							})
+						}
+						break
+					}
+					fmt.Printf("ERR: Cannot read fields of type:%s\n", p.BaseType)
+					return
+				}
 
-            // get endpoint's resp struct fields
-            respstru := _les.Query().ByKind(lesphina.KindStruct).ByName(m.GetName() + "Response").First()
-            if respstru != nil {
-                if st, ok := respstru.(*lesphina.Struct); ok {
-                    for _, f := range st.Fields {
-                        endData.RespElements = append(endData.RespElements, ElementData{
-                            Name:          f.Name,
-                            Type:          f.RawType,
-                            JsonFieldName: f.JsonFieldName(),
-                        })
-                    }
-                }
-            }
+				// client-side/bi-dir streaming
 
-            svcData.Endpoints = append(svcData.Endpoints, endData)
-        }
-        _renderData.Services = append(_renderData.Services, svcData)
-    }
+			}
 
-    rawAllStructs := _les.Query().ByKind(lesphina.KindStruct).All()
-    for _, stru := range rawAllStructs {
-        s, ok := stru.(*lesphina.Struct)
-        if !ok {
-            fmt.Println("the obj found is not Struct, weird")
-            continue
-        }
+			for _, p := range m.OutParams() {
+				// Unary
+				if p.IsPointer {
+					endData.RespType = p.BaseType
+					reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(p.BaseType).First()
+					if reqstru == nil {
+						fmt.Printf("ERR: Cannot find the entity in lesphina cache with name:in and type:%s\n", p.BaseType)
+						return
+					}
+					if st, ok := reqstru.(*lesphina.Struct); ok {
+						for _, f := range st.Fields {
+							endData.RespElements = append(endData.RespElements, ElementData{
+								Name:          f.Name,
+								Type:          f.BaseType,
+								JsonFieldName: f.JsonFieldName(),
+							})
+						}
+						break
+					}
+					fmt.Printf("ERR: Cannot read fields of type:%s\n", p.BaseType)
+					return
+				}
 
-        // hide non-exporting structures
-        if strings.Title(s.Name) != s.Name {
-            continue
-        }
+				// streaming
+			}
 
-        structData := Struct{Name: s.Name}
-        for _, f := range s.Fields {
-            structData.Fields = append(structData.Fields, ElementData{
-                Name:          f.Name,
-                Type:          f.RawType,
-                JsonFieldName: f.JsonFieldName(),
-            })
-        }
-        _renderData.Reference = append(_renderData.Reference, structData)
-    }
+			svcData.Endpoints = append(svcData.Endpoints, endData)
+		}
+		_renderData.Services = append(_renderData.Services, svcData)
+	}
+
+	rawAllStructs := _les.Query().ByKind(lesphina.KindStruct).All()
+	for _, stru := range rawAllStructs {
+		s, ok := stru.(*lesphina.Struct)
+		if !ok {
+			fmt.Println("the obj found is not Struct, weird")
+			continue
+		}
+
+		// hide non-exporting structures
+		if strings.Title(s.Name) != s.Name {
+			continue
+		}
+
+		structData := Struct{Name: s.Name}
+		for _, f := range s.Fields {
+			structData.Fields = append(structData.Fields, ElementData{
+				Name:          f.Name,
+				Type:          f.RawType,
+				JsonFieldName: f.JsonFieldName(),
+			})
+		}
+		_renderData.Reference = append(_renderData.Reference, structData)
+	}
 }
 
 func genHtml(raw string) string {
-    t, err := template.New("html2").Parse(raw)
-    if err != nil {
-        panic(err)
-    }
+	t, err := template.New("html2").Parse(raw)
+	if err != nil {
+		panic(err)
+	}
 
-    var buf bytes.Buffer
-    if err := t.Execute(&buf, _renderData); err != nil {
-        panic(err)
-    }
-    return buf.String()
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, _renderData); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
 
 func serveStaticContent(path, mime, content string) {
-    http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-        defer recoverHandling(w)
-        w.Header().Add("Content-Type", mime)
-        io.WriteString(w, content)
-    })
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		defer recoverHandling(w)
+		w.Header().Add("Content-Type", mime)
+		io.WriteString(w, content)
+	})
 }
 
 func handleGetType(w http.ResponseWriter, r *http.Request) {
-    defer recoverHandling(w)
+	defer recoverHandling(w)
 
-    typeName := strings.TrimSpace(r.URL.Query().Get("n"))
-    if typeName == "" {
-        http.Error(w, "lacking of query keyword (n)", http.StatusBadRequest)
-        return
-    }
+	typeName := strings.TrimSpace(r.URL.Query().Get("n"))
+	if typeName == "" {
+		http.Error(w, "lacking of query keyword (n)", http.StatusBadRequest)
+		return
+	}
 
-    t := _les.Query().ByName(typeName).First()
-    switch t.GetKind() {
-    case lesphina.KindFunction:
-        tt := t.(*lesphina.Function)
-        io.WriteString(w, tt.Json())
-    case lesphina.KindStruct:
-        tt := t.(*lesphina.Struct)
-        io.WriteString(w, tt.Json())
-    case lesphina.KindElement:
-        tt := t.(*lesphina.Element)
-        io.WriteString(w, tt.Json())
-    default:
-        io.WriteString(w, `{"err":"unknown or unsupport type"}`)
-    }
+	t := _les.Query().ByName(typeName).First()
+	switch t.GetKind() {
+	case lesphina.KindFunction:
+		tt := t.(*lesphina.Function)
+		io.WriteString(w, tt.Json())
+	case lesphina.KindStruct:
+		tt := t.(*lesphina.Struct)
+		io.WriteString(w, tt.Json())
+	case lesphina.KindElement:
+		tt := t.(*lesphina.Element)
+		io.WriteString(w, tt.Json())
+	default:
+		io.WriteString(w, `{"err":"unknown or unsupport type"}`)
+	}
 }
 
 func handleGetLesphinaMeta(w http.ResponseWriter, r *http.Request) {
-    defer recoverHandling(w)
-    io.WriteString(w, _les.Meta.Json())
+	defer recoverHandling(w)
+	io.WriteString(w, _les.Meta.Json())
 }
 
 func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
-    defer recoverHandling(w)
+	defer recoverHandling(w)
 
-    if r.Method != "POST" {
-        http.Error(w, "only support POST", http.StatusBadRequest)
-        return
-    }
+	if r.Method != "POST" {
+		http.Error(w, "only support POST", http.StatusBadRequest)
+		return
+	}
 
-    v, err := url.ParseQuery(r.URL.RawQuery)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	v, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    endpointName := v.Get("e")
-    if endpointName == "" {
-        http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
-        return
-    }
+	endpointName := v.Get("e")
+	if endpointName == "" {
+		http.Error(w, "lacking of query keyword (e)", http.StatusBadRequest)
+		return
+	}
 
-    hostAddr := v.Get("h")
-    if hostAddr == "" {
-        http.Error(w, "lacking of query keyword (h)", http.StatusBadRequest)
-        return
-    }
+	hostAddr := v.Get("h")
+	if hostAddr == "" {
+		http.Error(w, "lacking of query keyword (h)", http.StatusBadRequest)
+		return
+	}
 
-    var respInJson bool
-    respFormat := v.Get("format")
-    if strings.ToLower(respFormat) == "json" {
-        respInJson = true
-    }
+	var respInJson bool
+	respFormat := v.Get("format")
+	if strings.ToLower(respFormat) == "json" {
+		respInJson = true
+	}
 
-    body, err := ioutil.ReadAll(r.Body)
-    if err != nil {
-        http.Error(w, "can't read body", http.StatusBadRequest)
-        return
-    }
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return
+	}
 
-    data := string(body)
+	data := string(body)
 
-    // parse grpc metadata in http request header
-    var meta metadata.MD
-    for k, v := range r.Header {
-        if strings.HasPrefix(k, "gmeta-") {
-            realKey := strings.TrimPrefix(k, "gmeta-")
-            meta.Set(realKey, v...) // v is []string
-        }
-    }
+	// parse grpc metadata in http request header
+	var meta metadata.MD
+	for k, v := range r.Header {
+		if strings.HasPrefix(k, "gmeta-") {
+			realKey := strings.TrimPrefix(k, "gmeta-")
+			meta.Set(realKey, v...) // v is []string
+		}
+	}
 
-    call := &CallEndpointRequest{
-        Hostlist:   []string{hostAddr},
-        Endpoint:   endpointName,
-        DataInJSON: data,
-        Metadata:   meta,
-        RespInJSON: respInJson,
-    }
-    res, err := call.Call()
-    if err != nil {
-        log.Println("Err:", err.Error())
-        io.WriteString(w, err.Error())
-        return
-    }
-    io.WriteString(w, res)
+	call := &CallEndpointRequest{
+		Hostlist:   []string{hostAddr},
+		Endpoint:   endpointName,
+		DataInJSON: data,
+		Metadata:   meta,
+		RespInJSON: respInJson,
+	}
+	res, err := call.Call()
+	if err != nil {
+		log.Println("Err:", err.Error())
+		io.WriteString(w, err.Error())
+		return
+	}
+	io.WriteString(w, res)
 }
 
 func parseEndpointName(rawName string) (string, string) {
-    var svcName, endName string
-    i := strings.LastIndex(rawName, "#")
-    if i > 0 {
-        svcName = rawName[:i]
-        endName = rawName[i+1:]
-    } else {
-        endName = rawName
-    }
-    return svcName, endName
+	var svcName, endName string
+	i := strings.LastIndex(rawName, "#")
+	if i > 0 {
+		svcName = rawName[:i]
+		endName = rawName[i+1:]
+	} else {
+		endName = rawName
+	}
+	return svcName, endName
 }
 
 type CallEndpointRequest struct {
-    Hostlist     []string
-    Endpoint     string
-    DataInJSON   string
-    DataFile     string
-    Metadata     metadata.MD
-    DialTimeout  time.Duration
-    RespInJSON   bool
-    CallDuration time.Duration
-    Rate         uint64
-    Worker       uint64
-    IsLoop       bool
-    DumpFile     string
+	Hostlist     []string
+	Endpoint     string
+	DataInJSON   string
+	DataFile     string
+	Metadata     metadata.MD
+	DialTimeout  time.Duration
+	RespInJSON   bool
+	CallDuration time.Duration
+	Rate         uint64
+	Worker       uint64
+	IsLoop       bool
+	DumpFile     string
 }
 
 func (req *CallEndpointRequest) Call() (response string, err error) {
-    max := func(du1, du2 time.Duration) time.Duration {
-        if du1 > du2 {
-            return du1
-        } else {
-            return du2
-        }
-    }
+	max := func(du1, du2 time.Duration) time.Duration {
+		if du1 > du2 {
+			return du1
+		} else {
+			return du2
+		}
+	}
 
-    conn, err := grpc.Dial(
-        req.Hostlist[0],
-        grpc.WithInsecure(),
-        grpc.WithBlock(),
-        grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
+	conn, err := grpc.Dial(
+		req.Hostlist[0],
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
+		grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
 
-    if err != nil {
-        return
-    }
-    defer conn.Close()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
 
-    svcName, endName := parseEndpointName(req.Endpoint)
-    method, err := getMethodPath(svcName, endName)
-    if err != nil {
-        return
-    }
+	svcName, endName := parseEndpointName(req.Endpoint)
+	method, err := getMethodPath(svcName, endName)
+	if err != nil {
+		return
+	}
 
-    reqData := getVarByTypeName(endName + "Request")
-    if reqData == nil {
-        // Need to improve:
-        // Currently treating not-found structure as empty
-        // and ignoring given data
-        // In the future we may improve Lesphina
-        log.Println("WARN request type not found; use protobuf.Empty instead")
-        reqData = &protoempty.Empty{}
-    } else {
-        err = jsonpb.UnmarshalString(req.DataInJSON, reqData)
-        if err != nil {
-            return
-        }
-    }
+	reqData := getVarByTypeName(endName + "Request")
+	if reqData == nil {
+		// Need to improve:
+		// Currently treating not-found structure as empty
+		// and ignoring given data
+		// In the future we may improve Lesphina
+		log.Println("WARN request type not found; use protobuf.Empty instead")
+		reqData = &protoempty.Empty{}
+	} else {
+		err = jsonpb.UnmarshalString(req.DataInJSON, reqData)
+		if err != nil {
+			return
+		}
+	}
 
-    replyData := getVarByTypeName(endName + "Response")
-    if replyData == nil {
-        log.Println("WARN response type not found; treating as protobuf.Empty")
-        replyData = &protoempty.Empty{}
-    }
+	replyData := getVarByTypeName(endName + "Response")
+	if replyData == nil {
+		log.Println("WARN response type not found; treating as protobuf.Empty")
+		replyData = &protoempty.Empty{}
+	}
 
-    ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
-    err = conn.Invoke(ctx, method, reqData, replyData)
-    if err != nil {
-        return
-    }
+	ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
+	err = conn.Invoke(ctx, method, reqData, replyData)
+	if err != nil {
+		return
+	}
 
-    if req.RespInJSON {
-        jsonbytes, err := json.MarshalIndent(replyData, "", "    ")
-        if err != nil {
-            return "", err
-        }
-        response = string(jsonbytes)
-    } else {
-        response = replyData.String()
-    }
-    return
+	if req.RespInJSON {
+		jsonbytes, err := json.MarshalIndent(replyData, "", "    ")
+		if err != nil {
+			return "", err
+		}
+		response = string(jsonbytes)
+	} else {
+		response = replyData.String()
+	}
+	return
 }
 
 func (req *CallEndpointRequest) Massive() {
-    fmt.Printf("Massive Call on %s...\n", req.Endpoint)
+	fmt.Printf("Massive Call on %s...\n", req.Endpoint)
 
-    var target *trunks.Gtarget
-    if req.DataFile != "" {
-        target = prepMultipleReqTarget()
-    } else if req.DataInJSON != "" {
-        target = prepSingleReqTarget()
-    } else {
-        fmt.Println("Please specify either -d or -df")
-        return
-    }
+	var target *trunks.Gtarget
+	if req.DataFile != "" {
+		target = prepMultipleReqTarget()
+	} else if req.DataInJSON != "" {
+		target = prepSingleReqTarget()
+	} else {
+		fmt.Println("Please specify either -d or -df")
+		return
+	}
 
-    fmt.Println("Max workers:", req.Worker)
+	fmt.Println("Max workers:", req.Worker)
 
-    burner, err := trunks.NewBurner(
-        req.Hostlist,
-        trunks.WithLooping(req.IsLoop),
-        trunks.WithNumWorker(req.Worker),
-        trunks.WithDumpFile(req.DumpFile),
-        trunks.WithMetadata(req.Metadata))
+	burner, err := trunks.NewBurner(
+		req.Hostlist,
+		trunks.WithLooping(req.IsLoop),
+		trunks.WithNumWorker(req.Worker),
+		trunks.WithDumpFile(req.DumpFile),
+		trunks.WithMetadata(req.Metadata))
 
-    if err != nil {
-        panic(err)
-    }
-    defer burner.Close()
+	if err != nil {
+		panic(err)
+	}
+	defer burner.Close()
 
-    fmt.Println("Start at", time.Now().Format(time.UnixDate))
-    var metrics trunks.Metrics
-    startT := time.Now()
-    for res := range burner.Burn(target, req.Rate, req.CallDuration) {
-        metrics.Add(res)
-    }
-    dur := time.Since(startT)
-    metrics.Close()
+	fmt.Println("Start at", time.Now().Format(time.UnixDate))
+	var metrics trunks.Metrics
+	startT := time.Now()
+	for res := range burner.Burn(target, req.Rate, req.CallDuration) {
+		metrics.Add(res)
+	}
+	dur := time.Since(startT)
+	metrics.Close()
 
-    if err := burner.WaitDumpDone(); err != nil {
-        fmt.Printf("WARN: failed to dump response to file: %v\n", err)
-    }
+	if err := burner.WaitDumpDone(); err != nil {
+		fmt.Printf("WARN: failed to dump response to file: %v\n", err)
+	}
 
-    fmt.Println("----------------------")
-    fmt.Printf("Duration: %v\n", dur.Seconds())
-    fmt.Printf("Actual Rate: %f\n", metrics.Rate)
-    fmt.Printf("Total Requests: %d\n", metrics.Requests)
-    fmt.Printf("Success: %f\n", metrics.Success)
-    fmt.Printf("Mean: %s\n", metrics.Latencies.Mean)
-    fmt.Printf("50th: %s\n", metrics.Latencies.P50)
-    fmt.Printf("95th: %s\n", metrics.Latencies.P95)
-    fmt.Printf("99th: %s\n", metrics.Latencies.P99)
-    fmt.Printf("Max: %s\n", metrics.Latencies.Max)
+	fmt.Println("----------------------")
+	fmt.Printf("Duration: %v\n", dur.Seconds())
+	fmt.Printf("Actual Rate: %f\n", metrics.Rate)
+	fmt.Printf("Total Requests: %d\n", metrics.Requests)
+	fmt.Printf("Success: %f\n", metrics.Success)
+	fmt.Printf("Mean: %s\n", metrics.Latencies.Mean)
+	fmt.Printf("50th: %s\n", metrics.Latencies.P50)
+	fmt.Printf("95th: %s\n", metrics.Latencies.P95)
+	fmt.Printf("99th: %s\n", metrics.Latencies.P99)
+	fmt.Printf("Max: %s\n", metrics.Latencies.Max)
 }
 
 // massive call
 // read request from command line '-d'
 // in this case, it supports unique/random value
 func prepSingleReqTarget() *trunks.Gtarget {
-    svcName, endName := parseEndpointName(*_endpoint)
-    method, err := getMethodPath(svcName, endName)
-    if err != nil {
-        panic(err)
-    }
+	svcName, endName := parseEndpointName(*_endpoint)
+	method, err := getMethodPath(svcName, endName)
+	if err != nil {
+		panic(err)
+	}
 
-    reply := getVarByTypeName(endName + "Response")
-    if reply == nil {
-        log.Println("WARN response type not found; treating as protobuf.Empty")
-        reply = &protoempty.Empty{}
-    }
+	reply := getVarByTypeName(endName + "Response")
+	if reply == nil {
+		log.Println("WARN response type not found; treating as protobuf.Empty")
+		reply = &protoempty.Empty{}
+	}
 
-    req := getVarByTypeName(endName + "Request")
-    if req == nil {
-        log.Println("WARN request type not found; treating as protobuf.Empty")
-        req = &protoempty.Empty{}
+	req := getVarByTypeName(endName + "Request")
+	if req == nil {
+		log.Println("WARN request type not found; treating as protobuf.Empty")
+		req = &protoempty.Empty{}
 
-        return &trunks.Gtarget{
-            MethodName: method,
-            Requests:   []proto.Message{req},
-            Response:   reply,
-        }
-    }
+		return &trunks.Gtarget{
+			MethodName: method,
+			Requests:   []proto.Message{req},
+			Response:   reply,
+		}
+	}
 
-    // see if data has random/unique marks
-    // to generate lots of requests based on that
-    if strings.Contains(*_data, "<<arion:") {
-        // total amount of requests to be generated
-        total := *_rate * uint64((*_duration).Seconds())
-        if total > 10000000 {
-            // Dirty solution:
-            // suppose each request is 100 byte large, 10000000 requests are ~1G
-            // we consider this as the bar for now
-            panic("Amount is too large (> 10000000) to generate unique requests")
-        }
+	// see if data has random/unique marks
+	// to generate lots of requests based on that
+	if strings.Contains(*_data, "<<arion:") {
+		// total amount of requests to be generated
+		total := *_rate * uint64((*_duration).Seconds())
+		if total > 10000000 {
+			// Dirty solution:
+			// suppose each request is 100 byte large, 10000000 requests are ~1G
+			// we consider this as the bar for now
+			panic("Amount is too large (> 10000000) to generate unique requests")
+		}
 
-        var requests []proto.Message
-        genData := genUniqueData(*_data, total)
-        for _, d := range genData {
-            r := getVarByTypeName(endName + "Request") // must not nil
-            if err := jsonpb.UnmarshalString(d, r); err != nil {
-                panicf("ERR unmarshalling requests [%s] failed: %v\n", d, err)
-            }
-            requests = append(requests, r)
-        }
-        log.Printf("Generated %d requests\n", len(requests))
+		var requests []proto.Message
+		genData := genUniqueData(*_data, total)
+		for _, d := range genData {
+			r := getVarByTypeName(endName + "Request") // must not nil
+			if err := jsonpb.UnmarshalString(d, r); err != nil {
+				panicf("ERR unmarshalling requests [%s] failed: %v\n", d, err)
+			}
+			requests = append(requests, r)
+		}
+		log.Printf("Generated %d requests\n", len(requests))
 
-        return &trunks.Gtarget{
-            MethodName: method,
-            Requests:   requests,
-            Response:   reply,
-        }
-    }
+		return &trunks.Gtarget{
+			MethodName: method,
+			Requests:   requests,
+			Response:   reply,
+		}
+	}
 
-    if err = jsonpb.UnmarshalString(*_data, req); err != nil {
-        panic(err)
-    }
+	if err = jsonpb.UnmarshalString(*_data, req); err != nil {
+		panic(err)
+	}
 
-    return &trunks.Gtarget{
-        MethodName: method,
-        Requests:   []proto.Message{req},
-        Response:   reply,
-    }
+	return &trunks.Gtarget{
+		MethodName: method,
+		Requests:   []proto.Message{req},
+		Response:   reply,
+	}
 }
 
 // massive call
 // read multiple requests from a file
 func prepMultipleReqTarget() *trunks.Gtarget {
-    svcName, endName := parseEndpointName(*_endpoint)
-    method, err := getMethodPath(svcName, endName)
-    if err != nil {
-        panic(err)
-    }
+	svcName, endName := parseEndpointName(*_endpoint)
+	method, err := getMethodPath(svcName, endName)
+	if err != nil {
+		panic(err)
+	}
 
-    reply := getVarByTypeName(endName + "Response")
-    if reply == nil {
-        log.Println("WARN response type not found; treating as protobuf.Empty")
-        reply = &protoempty.Empty{}
-    }
+	reply := getVarByTypeName(endName + "Response")
+	if reply == nil {
+		log.Println("WARN response type not found; treating as protobuf.Empty")
+		reply = &protoempty.Empty{}
+	}
 
-    bts, err := ioutil.ReadFile(*_dataFile)
-    if err != nil {
-        panic(err)
-    }
+	bts, err := ioutil.ReadFile(*_dataFile)
+	if err != nil {
+		panic(err)
+	}
 
-    var reqs []proto.Message
-    content := string(bts)
-    for _, line := range strings.Split(content, "\n") {
-        req := getVarByTypeName(endName + "Request")
-        if req == nil {
-            continue
-        }
-        if err = jsonpb.UnmarshalString(line, req); err != nil {
-            continue
-        }
-        reqs = append(reqs, req)
-    }
-    fmt.Printf("with %d requests\n", len(reqs))
+	var reqs []proto.Message
+	content := string(bts)
+	for _, line := range strings.Split(content, "\n") {
+		req := getVarByTypeName(endName + "Request")
+		if req == nil {
+			continue
+		}
+		if err = jsonpb.UnmarshalString(line, req); err != nil {
+			continue
+		}
+		reqs = append(reqs, req)
+	}
+	fmt.Printf("with %d requests\n", len(reqs))
 
-    return &trunks.Gtarget{
-        MethodName: method,
-        Requests:   reqs,
-        Response:   reply,
-    }
+	return &trunks.Gtarget{
+		MethodName: method,
+		Requests:   reqs,
+		Response:   reply,
+	}
 }
 
 // get accurate method path by parsing pb source
 // with svc_name and end_name
 func getMethodPath(svcName, endName string) (res string, err error) {
-    qCandidates := _les.Query().ByKind(lesphina.KindFunction).ByName(endName).All()
-    if len(qCandidates) < 1 {
-        return "", fmt.Errorf("No function found by name: %s", endName)
-    }
+	qCandidates := _les.Query().ByKind(lesphina.KindFunction).ByName(endName).All()
+	if len(qCandidates) < 1 {
+		return "", fmt.Errorf("No function found by name: %s", endName)
+	}
 
-    var target *lesphina.Function
-    for _, c := range qCandidates {
-        if f, ok := c.(*lesphina.Function); ok {
-            if len(f.Recv) < 1 {
-                continue
-            }
+	var target *lesphina.Function
+	for _, c := range qCandidates {
+		if f, ok := c.(*lesphina.Function); ok {
+			if len(f.Recv) < 1 {
+				continue
+			}
 
-            // recv type should end with string 'Client'
-            if !strings.HasSuffix(f.Recv[0].BaseType, "Client") {
-                continue
-            }
+			// recv type should end with string 'Client'
+			if !strings.HasSuffix(f.Recv[0].BaseType, "Client") {
+				continue
+			}
 
-            if svcName != "" {
-                // if svcName is given, return the first candidate under this svc
-                if strings.ToLower(f.Recv[0].BaseType) == strings.ToLower(svcName) {
-                    target = f
-                    break
-                }
-            } else {
-                // if svcName is not given, return the first candidate
-                target = f
-                break
-            }
-        }
-    }
+			if svcName != "" {
+				// if svcName is given, return the first candidate under this svc
+				if strings.ToLower(f.Recv[0].BaseType) == strings.ToLower(svcName) {
+					target = f
+					break
+				}
+			} else {
+				// if svcName is not given, return the first candidate
+				target = f
+				break
+			}
+		}
+	}
 
-    if target == nil {
-        return "", fmt.Errorf("Endpoint Not Found (svcName: %s, endName: %s)", svcName, endName)
-    }
+	if target == nil {
+		return "", fmt.Errorf("Endpoint Not Found (svcName: %s, endName: %s)", svcName, endName)
+	}
 
-    rawBody := target.RawBody
-    if rawBody == "" {
-        return "", fmt.Errorf("Blank endpoint")
-    }
+	rawBody := target.RawBody
+	if rawBody == "" {
+		return "", fmt.Errorf("Blank endpoint")
+	}
 
-    m := _regexMethodPath.FindAllStringSubmatch(rawBody, 1)
-    if len(m) > 0 && len(m[0]) > 1 {
-        return m[0][1], nil
-    }
-    return "", fmt.Errorf("No match in rawBody")
+	m := _regexMethodPath.FindAllStringSubmatch(rawBody, 1)
+	if len(m) > 0 && len(m[0]) > 1 {
+		return m[0][1], nil
+	}
+	return "", fmt.Errorf("No match in rawBody")
 }
 
 func recoverHandling(w http.ResponseWriter) {
-    if r := recover(); r != nil {
-        io.WriteString(w, r.(error).Error())
-    }
+	if r := recover(); r != nil {
+		io.WriteString(w, r.(error).Error())
+	}
 }
 
 func panicf(f string, v ...interface{}) {
-    panic(fmt.Sprintf(f, v...))
+	panic(fmt.Sprintf(f, v...))
 }
 
 // --- unique value stuff
 type replacetask struct {
-    mark    string
-    mode    string
-    typ     string
-    strsize int
+	mark    string
+	mode    string
+	typ     string
+	strsize int
 }
 
 // how to use index to create unique string or int value
 // TODO: improve this
 func (t *replacetask) do(rawStr *string, index uint64) {
-    realvalue := ""
-    switch t.typ {
-    case "string":
-        realvalue = fmt.Sprintf("%d", index)
-    case "int":
-        realvalue = fmt.Sprintf("%d", index)
-    }
-    *rawStr = strings.Replace(*rawStr, t.mark, realvalue, 1)
+	realvalue := ""
+	switch t.typ {
+	case "string":
+		realvalue = fmt.Sprintf("%d", index)
+	case "int":
+		realvalue = fmt.Sprintf("%d", index)
+	}
+	*rawStr = strings.Replace(*rawStr, t.mark, realvalue, 1)
 }
 
 // gen random value (now it is only supporting string type)
 // and only support the first and only one mark
 // { ... <<arion:unique:string:10>> ... } => { ... "0000000123" ...}
 func genUniqueData(rawValue string, amount uint64) []string {
-    matches := _regexDataMark.FindAllStringSubmatch(rawValue, -1)
+	matches := _regexDataMark.FindAllStringSubmatch(rawValue, -1)
 
-    var tasks []*replacetask
-    var err error
-    for _, subm := range matches {
-        task := &replacetask{
-            mark: subm[0],
-            mode: strings.ToLower(subm[1]),
-        }
-        spls := strings.Split(subm[2], ":")
-        switch strings.ToLower(spls[0]) {
-        case "string":
-            task.typ = "string"
-            if len(spls) > 1 {
-                task.strsize, err = strconv.Atoi(spls[1])
-                if err != nil {
-                    panic(err)
-                }
-            }
-        case "int":
-            task.typ = "int"
-            // TODO: size of number type
-        default:
-            // only supporting int and string types
-            panic("non-supported type")
-        }
-        tasks = append(tasks, task)
-    }
+	var tasks []*replacetask
+	var err error
+	for _, subm := range matches {
+		task := &replacetask{
+			mark: subm[0],
+			mode: strings.ToLower(subm[1]),
+		}
+		spls := strings.Split(subm[2], ":")
+		switch strings.ToLower(spls[0]) {
+		case "string":
+			task.typ = "string"
+			if len(spls) > 1 {
+				task.strsize, err = strconv.Atoi(spls[1])
+				if err != nil {
+					panic(err)
+				}
+			}
+		case "int":
+			task.typ = "int"
+			// TODO: size of number type
+		default:
+			// only supporting int and string types
+			panic("non-supported type")
+		}
+		tasks = append(tasks, task)
+	}
 
-    // apply
-    var result []string
-    for i := uint64(0); i < amount; i++ {
-        tempStr := rawValue // copy original data
-        for _, t := range tasks {
-            t.do(&tempStr, i)
-        }
-        result = append(result, tempStr)
-    }
-    return result
+	// apply
+	var result []string
+	for i := uint64(0); i < amount; i++ {
+		tempStr := rawValue // copy original data
+		for _, t := range tasks {
+			t.do(&tempStr, i)
+		}
+		result = append(result, tempStr)
+	}
+	return result
 }
 
 func parseMetadata(origin string) metadata.MD {
-    md := make(metadata.MD)
-    if origin != "" {
-        for _, s := range strings.Split(origin, " ") {
-            s = strings.Trim(s, " ")
-            if s == "" {
-                continue
-            }
-            i := strings.Index(s, "=")
-            if i >= 0 {
-                md.Append(s[:i], s[i+1:])
-            }
-        }
-    }
-    return md
+	md := make(metadata.MD)
+	if origin != "" {
+		for _, s := range strings.Split(origin, " ") {
+			s = strings.Trim(s, " ")
+			if s == "" {
+				continue
+			}
+			i := strings.Index(s, "=")
+			if i >= 0 {
+				md.Append(s[:i], s[i+1:])
+			}
+		}
+	}
+	return md
 }

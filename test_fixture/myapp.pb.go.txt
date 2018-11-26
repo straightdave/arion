@@ -1,4 +1,4 @@
-package pb
+package myapp
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
