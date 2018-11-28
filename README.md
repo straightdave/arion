@@ -285,7 +285,7 @@ Massive Call on RouteGuide#RecordRoute ...
 [# 1] response: point_count:303236 elapsed_time:10
 ```
 
-`-N` is the concurrent connection number.
+`-N` is the concurrent connection number. `-duration` can be used here to indicate the stress test duration (by default 10s).
 
 > **NOTE**
 > * Currently no metrics are supported.
