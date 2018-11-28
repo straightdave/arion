@@ -576,9 +576,8 @@ func (req *CallEndpointRequest) Call() (response string, err error) {
 	max := func(du1, du2 time.Duration) time.Duration {
 		if du1 > du2 {
 			return du1
-		} else {
-			return du2
 		}
+		return du2
 	}
 
 	conn, err := grpc.Dial(
