@@ -9,10 +9,17 @@
 
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
-Arion is a tool to test gRPC service. Arion is able to:
-- Get information of gRPC services / endpoints / data entities
-- Debug gRPC endpoints like `curl` does for HTTP
-- Do performance test for gRPC services
+Arion is a tool to help develop and test gRPC service.
+Arion can generate test clients (called **postgal** by default) based on `*.pb.go` files.
+
+Main features (of postgal) include:
+- Get information of gRPC services / endpoints / data types
+- Debug gRPC endpoints as `curl` or Postman(TM) does for HTTP
+- Do stress test on gRPC endpoints
+- Support both Unary and Streaming
+
+> **NOTE**
+> * As of Nov.28, 2018, Arion only supports client-side streaming.
 
 ## Get Arion
 ```
@@ -98,41 +105,45 @@ Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 ## Usage of `postgal`
 
 ```
-Usage of postgal:
+Usage of ./postgal:
+  -N uint
+    	how many concurrent streaming connections when doing stress test mode (-x) (default 1)
   -at string
-      address to host PostGal in browser mode (default ":9999")
+    	address to host Postgal in browser mode (default ":9999")
   -d string
-      request data
+    	request data string
   -debug
-      print some debug info (for dev purpose)
+    	print some debug info (for dev purpose)
   -df string
-      request data file
-      Data in the file will be read line by line
+    	request data file. Data in the file will be sent line by line
   -dumpto string
-      dump massive call responses to file
+    	dump massive call responses to file
   -duration duration
-      execution duration: 10s, 20m (default 10s)
+    	test duration in stress test mode: 10s, 20m (default 10s)
   -e string
-      endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
+    	endpoint name (<svc_name>#<end_name> or just <end_name>) to execute
   -h string
-      hosts of target service (commas to seperate multiple hosts) (default ":8087")
-  -i  show info
+    	hosts of target service (commas to seperate multiple hosts) (default ":8087")
+  -i	print basic service info
   -json
-      response in JSON format
+    	print response in JSON format
   -loop
-      repeat all requests in loops
+    	repeatly sending all requests in data file (-df)
   -meta string
-      gRPC metadata (format: 'key1=value1 key2=value2')
+    	gRPC metadata (format: 'key1=value1 key2=value2')
+  -n uint
+    	how many times to send streaming msg to server in one connection (default 10)
   -rate uint
-      execution frequency per second (default 1)
+    	expected QPS (query per second) in stress test mode (default 1)
+  -s	streaming mode (now supporting client-side streaming)
   -serve
-      use PostGal in browser mode
+    	browser mode
   -t string
-      data type name
-  -v  print version info
+    	data type name
+  -v	print version info
   -worker uint
-      workers (concurrent goroutines) (default 10)
-  -x  massive call endpoint (needs -rate and -duration)
+    	workers (max volume of goroutine pool) (default 10)
+  -x	stress test mode
 ```
 
 **TL;DR**, let's see some examples below.
@@ -196,6 +207,17 @@ You can use `-meta` to add metadata to the gRPC call:
 $ ./postgal -e Hello -d '{"Name":"dave"}' -meta 'k1=v1 k2=v2 k1=v3'
 ```
 
+#### [experimental] Call via client-side streaming
+```
+./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -n 10 -h 0.0.0.0:10000
+point_count:10
+```
+
+`-s` indicates it's a streaming call; `-n` means how many times to send the request data into the stream (to server).
+Then if the server has a response for this streamed requests, _postgal_ would print that.
+
+> Here it uses google.golang.org/grpc/examples/route_guide as the streaming server.
+
 ### Performance test
 
 #### 1. to execute performance tests against one endpoint:
@@ -238,7 +260,7 @@ $ ./postgal -e Hello -d '{"Name":"daveeeeee"}' -x -dumpto responses.dump
 ```
 So _postgal_ would serialize all successful responses into JSON format and write them to the file, line by line.
 
-#### 6. auto-generated value
+#### [experimental] 6. auto-generated value
 Currently _postgal_ supports to generate unique data per request:
 ```
 $ ./postgal -e Hello -d '{"Name":"Ultraman-<<arion:unique:string>>"}' -x -rate 5 -duration 10s
@@ -251,7 +273,22 @@ It will generate requests like:
 ...
 {"Name":"Ultraman-49"}
 ```
-> **Experimental**
+
+#### [experimental] 7. stress test via client-side streaming
+```
+$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -x -N 5 -h 0.0.0.0:10000
+Massive Call on RouteGuide#RecordRoute ...
+[# 3] response: point_count:302204 elapsed_time:10
+[# 4] response: point_count:301157 elapsed_time:10
+[# 2] response: point_count:304024 elapsed_time:10
+[# 0] response: point_count:298563 elapsed_time:10
+[# 1] response: point_count:303236 elapsed_time:10
+```
+
+`-N` is the concurrent connection number.
+
+> **NOTE**
+> * Currently no metrics are supported.
 
 ## Browser Mode
 Browser mode is the graphic way to use _postgal_. Like using Postman(TM).
