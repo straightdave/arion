@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -43,23 +44,24 @@ var (
 	// flags
 	_ver            = flag.Bool("v", false, "print version info")
 	_debug          = flag.Bool("debug", false, "print some debug info (for dev purpose)")
-	_serve          = flag.Bool("serve", false, "use PostGal in browser mode")
-	_arionHost      = flag.String("at", ":9999", "address to host PostGal in browser mode")
-	_info           = flag.Bool("i", false, "show info")
+	_serve          = flag.Bool("serve", false, "browser mode")
+	_arionHost      = flag.String("at", ":9999", "address to host Postgal in browser mode")
+	_info           = flag.Bool("i", false, "print basic service info")
 	_type           = flag.String("t", "", "data type name")
 	_hosts          = flag.String("h", ":8087", "hosts of target service (commas to seperate multiple hosts)")
 	_endpoint       = flag.String("e", "", "endpoint name (<svc_name>#<end_name> or just <end_name>) to execute")
-	_json           = flag.Bool("json", false, "response in JSON format")
-	_massive        = flag.Bool("x", false, "massive call endpoint (needs -rate and -duration)")
-	_data           = flag.String("d", "", "request data")
+	_json           = flag.Bool("json", false, "print response in JSON format")
+	_isMassive      = flag.Bool("x", false, "stress test mode")
+	_data           = flag.String("d", "", "request data string")
 	_meta           = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
-	_isStreaming    = flag.Bool("s", false, "is streaming (now supporting client-side streaming)")
-	_streamingTimes = flag.Uint("n", 10, "how many times to send streaming msg to server")
-	_dataFile       = flag.String("df", "", "request data file\nData in the file will be read line by line")
-	_loop           = flag.Bool("loop", false, "repeat all requests in loops")
-	_duration       = flag.Duration("duration", 10*time.Second, "execution duration: 10s, 20m")
-	_rate           = flag.Uint64("rate", 1, "execution frequency per second")
-	_worker         = flag.Uint64("worker", 10, "workers (concurrent goroutines)")
+	_isStreaming    = flag.Bool("s", false, "streaming mode (now supporting client-side streaming)")
+	_streamingTimes = flag.Uint("n", 10, "how many times to send streaming msg to server in one connection")
+	_numStream      = flag.Uint("N", 1, "how many concurrent streaming connections when doing stress test mode (-x)")
+	_dataFile       = flag.String("df", "", "request data file. Data in the file will be sent line by line")
+	_loop           = flag.Bool("loop", false, "repeatly sending all requests in data file (-df)")
+	_duration       = flag.Duration("duration", 10*time.Second, "test duration in stress test mode: 10s, 20m")
+	_rate           = flag.Uint64("rate", 1, "expected QPS (query per second) in stress test mode")
+	_worker         = flag.Uint64("worker", 10, "workers (max volume of goroutine pool)")
 	_dumpToFile     = flag.String("dumpto", "", "dump massive call responses to file")
 )
 
@@ -118,10 +120,12 @@ func main() {
 		req := &CallEndpointRequest{
 			Hostlist:       _hostList,
 			Endpoint:       *_endpoint,
+			IsMassive:      *_isMassive,
 			DataInJSON:     *_data,
 			Metadata:       parseMetadata(*_meta),
 			IsStreaming:    *_isStreaming,
 			StreamingTimes: *_streamingTimes,
+			NumStream:      *_numStream,
 			RespInJSON:     *_json,
 			DataFile:       *_dataFile,
 			IsLoop:         *_loop,
@@ -131,7 +135,26 @@ func main() {
 			Worker:         *_worker,
 		}
 
-		if *_massive {
+		svcName, endName := parseEndpointName(req.Endpoint)
+		method, err := getMethodPath(svcName, endName)
+		if err != nil {
+			return
+		}
+
+		if svcName == "" && len(_renderData.Services) > 1 {
+			fmt.Println("ERR: ambiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
+			return
+		}
+
+		if svcName == "" && len(_renderData.Services) == 1 {
+			svcName = _renderData.Services[0].Name
+		}
+
+		req.Method = method
+		req.SvcName = svcName
+		req.EndName = endName
+
+		if req.IsMassive {
 			req.Massive()
 			return
 		}
@@ -558,12 +581,17 @@ func parseEndpointName(rawName string) (string, string) {
 type CallEndpointRequest struct {
 	Hostlist       []string
 	Endpoint       string
+	Method         string
+	SvcName        string
+	EndName        string
+	IsMassive      bool
 	DataInJSON     string
 	DataFile       string
 	Metadata       metadata.MD
 	DialTimeout    time.Duration
 	IsStreaming    bool
 	StreamingTimes uint
+	NumStream      uint
 	RespInJSON     bool
 	CallDuration   time.Duration
 	Rate           uint64
@@ -572,6 +600,7 @@ type CallEndpointRequest struct {
 	DumpFile       string
 }
 
+// Call ...
 func (req *CallEndpointRequest) Call() (response string, err error) {
 	max := func(du1, du2 time.Duration) time.Duration {
 		if du1 > du2 {
@@ -591,92 +620,20 @@ func (req *CallEndpointRequest) Call() (response string, err error) {
 	}
 	defer conn.Close()
 
-	svcName, endName := parseEndpointName(req.Endpoint)
-	method, err := getMethodPath(svcName, endName)
-	if err != nil {
-		return
-	}
-
-	if svcName == "" && len(_renderData.Services) > 1 {
-		fmt.Printf("ERR: ambiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
-		return "", fmt.Errorf("Ambiguous endpoint name")
-	}
-
-	if svcName == "" && len(_renderData.Services) == 1 {
-		svcName = _renderData.Services[0].Name
-	}
-
 	// fmt.Printf("DEBUG: svc name=%s; end name=%s\n", svcName, endName)
 
-	reqType := endName + "Request"
-	respType := endName + "Response"
-
-outter:
-	for _, svc := range _renderData.Services {
-		if svc.Name == svcName {
-			for _, e := range svc.Endpoints {
-				if e.Name == endName {
-					reqType = e.ReqType
-					respType = e.RespType
-					break outter
-				}
-			}
-		}
-	}
-
-	reqData := getVarByTypeName(reqType)
-	if reqData == nil {
-		// Need to improve:
-		// Currently treating not-found structure as empty
-		// and ignoring given data
-		// In the future we may improve Lesphina
-		log.Printf("WARN request type [%v] not found; use protobuf.Empty instead", reqType)
-		reqData = &protoempty.Empty{}
-	} else {
-		err = jsonpb.UnmarshalString(req.DataInJSON, reqData)
-		if err != nil {
-			return
-		}
-	}
-
-	replyData := getVarByTypeName(respType)
-	if replyData == nil {
-		log.Printf("WARN response type [%v] not found; treating as protobuf.Empty", respType)
-		replyData = &protoempty.Empty{}
-	}
+	reqData, replyData := getReqReplyData(req)
 
 	ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
 
 	if req.IsStreaming {
-		desc := &grpc.StreamDesc{
-			ClientStreams: true,
-		}
-
-		stream, err := conn.NewStream(ctx, desc, method)
+		err = sendClientStream(ctx, conn, req, reqData, replyData)
 		if err != nil {
-			fmt.Printf("ERR: cannot create Stream: %v\n", err)
-			return "", err
+			log.Printf("failed to send client stream: %v", err)
+			return
 		}
-
-		for i := uint(0); i < req.StreamingTimes; i++ {
-			if err := stream.SendMsg(reqData); err != nil {
-				fmt.Printf("ERR: failed to send streaming msg: %v\n", err)
-				return "", err
-			}
-		}
-
-		if err := stream.CloseSend(); err != nil {
-			fmt.Printf("ERR: failed to close sending streaming msg: %v\n", err)
-			return "", err
-		}
-
-		if err := stream.RecvMsg(replyData); err != nil {
-			fmt.Printf("ERR: failed to receive streaming response: %v\n", err)
-			return "", err
-		}
-
 	} else {
-		err = conn.Invoke(ctx, method, reqData, replyData)
+		err = conn.Invoke(ctx, req.Method, reqData, replyData)
 		if err != nil {
 			fmt.Printf("ERR: failed to invoke unary request: %v\n", err)
 			return
@@ -696,8 +653,47 @@ outter:
 	return
 }
 
+// Massive ...
 func (req *CallEndpointRequest) Massive() {
-	fmt.Printf("Massive Call on %s...\n", req.Endpoint)
+	fmt.Printf("Massive Call on %s ...\n", req.Endpoint)
+
+	if req.IsStreaming {
+		wg := &sync.WaitGroup{}
+		for i := uint(0); i < req.NumStream; i++ {
+			wg.Add(1)
+			go func(index uint) {
+				// log.Printf("start worker: %d", index)
+				defer wg.Done()
+
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[# %d] panic recovered: %v", index, r.(error))
+					}
+				}()
+
+				conn, err := grpc.Dial(
+					req.Hostlist[0],
+					grpc.WithInsecure(),
+					grpc.WithBlock(),
+					grpc.WithTimeout(5*time.Second))
+
+				if err != nil {
+					log.Printf("failed to dial to server: %v", err)
+					return
+				}
+				defer conn.Close()
+
+				reqData, replyData := getReqReplyData(req)
+				if err := sendClientStream(context.Background(), conn, req, reqData, replyData); err != nil {
+					log.Printf("[# %d] ERR: %v", index, err)
+					return
+				}
+				fmt.Printf("[# %d] response: %+v\n", index, replyData)
+			}(i)
+		}
+		wg.Wait()
+		return
+	}
 
 	var target *trunks.Gtarget
 	if req.DataFile != "" {
@@ -1003,4 +999,91 @@ func parseMetadata(origin string) metadata.MD {
 		}
 	}
 	return md
+}
+
+func sendClientStream(ctx context.Context, conn *grpc.ClientConn, req *CallEndpointRequest, reqData, replyData proto.Message) error {
+	desc := &grpc.StreamDesc{
+		ClientStreams: true,
+	}
+
+	stream, err := conn.NewStream(ctx, desc, req.Method)
+	if err != nil {
+		log.Printf("ERR: cannot create Stream: %v", err)
+		return err
+	}
+
+	if req.IsMassive {
+		timeoutCh := time.After(req.CallDuration)
+	outter:
+		for {
+			if err := stream.SendMsg(reqData); err != nil {
+				log.Printf("ERR: failed to send streaming msg: %v", err)
+				return err
+			}
+			select {
+			case <-timeoutCh:
+				break outter
+			default:
+			}
+		}
+	} else {
+		for i := uint(0); i < req.StreamingTimes; i++ {
+			if err := stream.SendMsg(reqData); err != nil {
+				log.Printf("ERR: failed to send streaming msg: %v", err)
+				return err
+			}
+		}
+	}
+
+	if err := stream.CloseSend(); err != nil {
+		log.Printf("ERR: failed to close sending streaming msg: %v", err)
+		return err
+	}
+
+	if err := stream.RecvMsg(replyData); err != nil {
+		log.Printf("ERR: failed to receive streaming response: %v", err)
+		return err
+	}
+	return nil
+}
+
+func getReqReplyData(req *CallEndpointRequest) (reqData, replyData proto.Message) {
+	reqType := req.EndName + "Request"
+	respType := req.EndName + "Response"
+
+outter:
+	for _, svc := range _renderData.Services {
+		if svc.Name == req.SvcName {
+			for _, e := range svc.Endpoints {
+				if e.Name == req.EndName {
+					reqType = e.ReqType
+					respType = e.RespType
+					break outter
+				}
+			}
+		}
+	}
+
+	reqData = getVarByTypeName(reqType)
+	if reqData == nil {
+		// Need to improve:
+		// Currently treating not-found structure as empty
+		// and ignoring given data
+		// In the future we may improve Lesphina
+		log.Printf("WARN request type [%v] not found; use protobuf.Empty instead", reqType)
+		reqData = &protoempty.Empty{}
+	} else {
+		err := jsonpb.UnmarshalString(req.DataInJSON, reqData)
+		if err != nil {
+			log.Printf("ERR unmarshall reqData failed: %v", err)
+			return
+		}
+	}
+
+	replyData = getVarByTypeName(respType)
+	if replyData == nil {
+		log.Printf("WARN response type [%v] not found; treating as protobuf.Empty", respType)
+		replyData = &protoempty.Empty{}
+	}
+	return
 }
