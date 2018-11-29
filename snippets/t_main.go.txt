@@ -694,11 +694,14 @@ func (req *CallEndpointRequest) Call() (response string, err error) {
 	case ServerSide:
 		err = req.sendServerStream(ctx, conn)
 		if err != nil {
-			log.Fatalf("ERR: failed to do server streaming: %v", err)
+			log.Printf("ERR: failed to do server streaming: %v", err)
 		}
 		return // quit
 	case Bidirectional:
-		fmt.Println("bidirectional streaming call is in my plan :)")
+		err = req.sendBidirectStream(ctx, conn)
+		if err != nil {
+			log.Printf("ERR: failed to do server streaming: %v", err)
+		}
 		return // quit
 	default:
 		replyData, err = req.unaryCall(ctx, conn)
@@ -779,9 +782,9 @@ func (req *CallEndpointRequest) Massive() {
 
 	var target *trunks.Gtarget
 	if req.DataFile != "" {
-		target = prepMultipleReqTarget()
+		target = prepMultipleReqTarget(req)
 	} else if req.DataInJSON != "" {
-		target = prepSingleReqTarget()
+		target = prepSingleReqTarget(req)
 	} else {
 		fmt.Println("Please specify either -d or -df")
 		return
@@ -829,27 +832,21 @@ func (req *CallEndpointRequest) Massive() {
 // massive call
 // read request from command line '-d'
 // in this case, it supports unique/random value
-func prepSingleReqTarget() *trunks.Gtarget {
-	svcName, endName := parseEndpointName(*_endpoint)
-	method, err := getMethodPath(svcName, endName)
-	if err != nil {
-		panic(err)
-	}
-
-	reply := getVarByTypeName(endName + "Response")
+func prepSingleReqTarget(req *CallEndpointRequest) *trunks.Gtarget {
+	reply := getVarByTypeName(req.ResponseTypeName)
 	if reply == nil {
 		log.Println("WARN response type not found; treating as protobuf.Empty")
 		reply = &protoempty.Empty{}
 	}
 
-	req := getVarByTypeName(endName + "Request")
-	if req == nil {
+	reqData := getVarByTypeName(req.RequestTypeName)
+	if reqData == nil {
 		log.Println("WARN request type not found; treating as protobuf.Empty")
-		req = &protoempty.Empty{}
+		reqData = &protoempty.Empty{}
 
 		return &trunks.Gtarget{
-			MethodName: method,
-			Requests:   []proto.Message{req},
+			MethodName: req.Method,
+			Requests:   []proto.Message{reqData},
 			Response:   reply,
 		}
 	}
@@ -869,7 +866,7 @@ func prepSingleReqTarget() *trunks.Gtarget {
 		var requests []proto.Message
 		genData := genUniqueData(*_data, total)
 		for _, d := range genData {
-			r := getVarByTypeName(endName + "Request") // must not nil
+			r := getVarByTypeName(req.RequestTypeName) // must not nil
 			if err := jsonpb.UnmarshalString(d, r); err != nil {
 				panicf("ERR unmarshalling requests [%s] failed: %v\n", d, err)
 			}
@@ -878,33 +875,27 @@ func prepSingleReqTarget() *trunks.Gtarget {
 		log.Printf("Generated %d requests\n", len(requests))
 
 		return &trunks.Gtarget{
-			MethodName: method,
+			MethodName: req.Method,
 			Requests:   requests,
 			Response:   reply,
 		}
 	}
 
-	if err = jsonpb.UnmarshalString(*_data, req); err != nil {
+	if err := jsonpb.UnmarshalString(req.DataInJSON, reqData); err != nil {
 		panic(err)
 	}
 
 	return &trunks.Gtarget{
-		MethodName: method,
-		Requests:   []proto.Message{req},
+		MethodName: req.Method,
+		Requests:   []proto.Message{reqData},
 		Response:   reply,
 	}
 }
 
 // massive call
 // read multiple requests from a file
-func prepMultipleReqTarget() *trunks.Gtarget {
-	svcName, endName := parseEndpointName(*_endpoint)
-	method, err := getMethodPath(svcName, endName)
-	if err != nil {
-		panic(err)
-	}
-
-	reply := getVarByTypeName(endName + "Response")
+func prepMultipleReqTarget(req *CallEndpointRequest) *trunks.Gtarget {
+	reply := getVarByTypeName(req.ResponseTypeName)
 	if reply == nil {
 		log.Println("WARN response type not found; treating as protobuf.Empty")
 		reply = &protoempty.Empty{}
@@ -918,7 +909,7 @@ func prepMultipleReqTarget() *trunks.Gtarget {
 	var reqs []proto.Message
 	content := string(bts)
 	for _, line := range strings.Split(content, "\n") {
-		req := getVarByTypeName(endName + "Request")
+		req := getVarByTypeName(req.RequestTypeName)
 		if req == nil {
 			continue
 		}
@@ -930,7 +921,7 @@ func prepMultipleReqTarget() *trunks.Gtarget {
 	fmt.Printf("with %d requests\n", len(reqs))
 
 	return &trunks.Gtarget{
-		MethodName: method,
+		MethodName: req.Method,
 		Requests:   reqs,
 		Response:   reply,
 	}
@@ -1197,6 +1188,67 @@ outter:
 		}
 	}
 	log.Println("server streaming finished")
+	return nil
+}
+
+func (req *CallEndpointRequest) sendBidirectStream(ctx context.Context, conn *grpc.ClientConn) error {
+	if req.IsMassive {
+		return fmt.Errorf("stress test for bidirectional streaming is not supported")
+	}
+
+	desc := &grpc.StreamDesc{
+		ClientStreams: true,
+		ServerStreams: true,
+	}
+
+	stream, err := conn.NewStream(ctx, desc, req.Method)
+	if err != nil {
+		log.Printf("ERR: cannot create Stream: %v", err)
+		return err
+	}
+
+	// reader
+	waitc := make(chan struct{})
+	go func() {
+		defer func() {
+			waitc <- struct{}{}
+			close(waitc)
+		}()
+
+		i := 0
+		for {
+			m := getVarByTypeName(req.ResponseTypeName)
+			err := stream.RecvMsg(m)
+			if err == io.EOF {
+				fmt.Println("read done.")
+				return
+			}
+			if err != nil {
+				log.Printf("Failed to receive msg: %v", err)
+				return
+			}
+			fmt.Println(i, m.String())
+			i++
+		}
+	}()
+
+	// writer
+	reqData, _ := getReqReplyData(req)
+
+	for i := uint(0); i < req.StreamingTimes; i++ {
+		if err := stream.SendMsg(reqData); err != nil {
+			log.Printf("Failed to send a request: %v", err)
+			return err
+		}
+	}
+
+	if err := stream.CloseSend(); err != nil {
+		log.Printf("Failed to close: %v", err)
+		return err
+	}
+	fmt.Println("finished sending")
+
+	<-waitc
 	return nil
 }
 
