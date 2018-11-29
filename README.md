@@ -106,6 +106,10 @@ Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ```
 Usage of ./postgal:
+  -B string
+    	protobuf binary data file
+  -G string
+    	the bin file name to generate
   -N uint
     	how many concurrent streaming connections when doing stress test mode (-x) (default 1)
   -at string
@@ -180,6 +184,20 @@ $ ./postgal -i -t HelloRequest
 - Name string (json field name: Name)
 ```
 
+### Generate binary data file from JSON
+```
+$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123,"longitude":123}' -G ddd.dat
+[8 123 16 123]
+```
+
+This is one handy tool currently for testing purpose.
+
+### Using binary data file
+```
+$ ./postgal -e RouteGuide#RecordRoute -B ddd.dat -h 0.0.0.0:10000 -s -n 10
+point_count:10
+```
+
 ### Call endpoints
 
 ```
@@ -189,7 +207,9 @@ Message: Hello Dave
 
 > **Tips**
 > * `-e <endpoint name>`, case sensitive.
-> * `-d <data in JSON format>`
+> * `-d <data in JSON format>` providing request data in JSON format
+> * `-B <bin data file>` providing request data from binary file
+> * If both `-d` and `-B` are given, `-d` will take effect
 > * If `-h` option is not given, postgal uses '0.0.0.0:8087' by default.
 > * You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 > * If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored
@@ -209,7 +229,7 @@ $ ./postgal -e Hello -d '{"Name":"dave"}' -meta 'k1=v1 k2=v2 k1=v3'
 
 #### [experimental] Call via client-side streaming
 ```
-./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -n 10 -h 0.0.0.0:10000
+$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -n 10 -h 0.0.0.0:10000
 point_count:10
 ```
 
@@ -232,14 +252,14 @@ Massive Call...
 > * If only `-x` is specified, it implies `-rate 1 -duration 10s` by default
 > * `-meta` is still available in massive gRPC call; However we only use one set of metadata for all requests. If needed, I'll add this functionality to call with multiple metadata sets.
 
-#### 2. data file
+#### 2. data file (only used in `-x` mode)
 You can use `-df` to specify a data file which consists of multiple request data (each in one line) to conduct the massive call:
 ```
 $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 30s -loop
 ```
 >If you don't use the option `-loop` when using a data file, the massive call will stop after all request data in the file are sent once.
 
-#### 3. worker number
+#### 3. worker number (only used in `-x` mode)
 Using `-worker` to specify a number of worker pool size (maximum concurrent goroutines; default is 10) in performance testing:
 ```
 $ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
@@ -253,14 +273,14 @@ In this case, `postgal` would send requests to those hosts in a simple (client s
 $ ./postgal -h 192.168.0.1:8087,192.168.0.2:8087 -e Hello -d '{"Name":"dave"}' -x
 ```
 
-#### 5. dump responses
+#### 5. dump responses (only used in `-x` mode / unary)
 To dump responses to a file:
 ```
 $ ./postgal -e Hello -d '{"Name":"daveeeeee"}' -x -dumpto responses.dump
 ```
 So _postgal_ would serialize all successful responses into JSON format and write them to the file, line by line.
 
-#### [experimental] 6. auto-generated value
+#### [experimental] 6. auto-generated value (`-x` mode and unary only)
 Currently _postgal_ supports to generate unique data per request:
 ```
 $ ./postgal -e Hello -d '{"Name":"Ultraman-<<arion:unique:string>>"}' -x -rate 5 -duration 10s

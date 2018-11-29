@@ -58,11 +58,13 @@ var (
 	_streamingTimes = flag.Uint("n", 10, "how many times to send streaming msg to server in one connection")
 	_numStream      = flag.Uint("N", 1, "how many concurrent streaming connections when doing stress test mode (-x)")
 	_dataFile       = flag.String("df", "", "request data file. Data in the file will be sent line by line")
+	_binFile        = flag.String("B", "", "protobuf binary data file")
 	_loop           = flag.Bool("loop", false, "repeatly sending all requests in data file (-df)")
 	_duration       = flag.Duration("duration", 10*time.Second, "test duration in stress test mode: 10s, 20m")
 	_rate           = flag.Uint64("rate", 1, "expected QPS (query per second) in stress test mode")
 	_worker         = flag.Uint64("worker", 10, "workers (max volume of goroutine pool)")
 	_dumpToFile     = flag.String("dumpto", "", "dump massive call responses to file")
+	_genBin         = flag.String("G", "", "the bin file name to generate")
 )
 
 var _version, _checksum string
@@ -153,6 +155,24 @@ func main() {
 		req.Method = method
 		req.SvcName = svcName
 		req.EndName = endName
+
+		if len(*_binFile) != 0 {
+			d, err := ioutil.ReadFile(*_binFile)
+			if err != nil {
+				fmt.Printf("Failed to read bin file: %v\n", err)
+				return
+			}
+			req.BinData = d
+		}
+
+		// gen bin data file
+		if len(*_genBin) != 0 {
+			err := req.serialize(*_genBin)
+			if err != nil {
+				fmt.Printf("ERR: failed to generate bin file: %v\n", err)
+			}
+			return
+		}
 
 		if req.IsMassive {
 			req.Massive()
@@ -586,6 +606,7 @@ type CallEndpointRequest struct {
 	EndName        string
 	IsMassive      bool
 	DataInJSON     string
+	BinData        []byte
 	DataFile       string
 	Metadata       metadata.MD
 	DialTimeout    time.Duration
@@ -672,7 +693,7 @@ func (req *CallEndpointRequest) Massive() {
 				}()
 
 				conn, err := grpc.Dial(
-					req.Hostlist[0],
+					req.Hostlist[0], // only use the first host
 					grpc.WithInsecure(),
 					grpc.WithBlock(),
 					grpc.WithTimeout(5*time.Second))
@@ -852,6 +873,22 @@ func prepMultipleReqTarget() *trunks.Gtarget {
 		Requests:   reqs,
 		Response:   reply,
 	}
+}
+
+func (req *CallEndpointRequest) serialize(binFile string) error {
+	if len(req.DataInJSON) < 3 { // magic number
+		return fmt.Errorf("No data in JSON")
+	}
+	reqData, _ := getReqReplyData(req)
+	if reqData != nil {
+		raw, err := proto.Marshal(reqData)
+		if err != nil {
+			return err
+		}
+		fmt.Println(raw)
+		return ioutil.WriteFile(binFile, raw, 0644)
+	}
+	return nil
 }
 
 // get accurate method path by parsing pb source
@@ -1072,12 +1109,20 @@ outter:
 		// In the future we may improve Lesphina
 		log.Printf("WARN request type [%v] not found; use protobuf.Empty instead", reqType)
 		reqData = &protoempty.Empty{}
-	} else {
+	} else if len(req.DataInJSON) > 0 {
 		err := jsonpb.UnmarshalString(req.DataInJSON, reqData)
 		if err != nil {
 			log.Printf("ERR unmarshall reqData failed: %v", err)
 			return
 		}
+	} else if len(req.BinData) > 0 {
+		err := proto.Unmarshal(req.BinData, reqData)
+		if err != nil {
+			log.Printf("ERR failed to unmarshall BinData as request: %v", err)
+			return
+		}
+	} else {
+		log.Fatalf("No data provided (JSON data or BinData) to send!")
 	}
 
 	replyData = getVarByTypeName(respType)
