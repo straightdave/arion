@@ -19,7 +19,9 @@ Main features (of postgal) include:
 - Support both Unary and Streaming
 
 > **NOTE**
-> * As of Nov.28, 2018, Arion only supports client-side streaming.
+> * As of Nov.28, 2018, Arion only supports client-side/server-side streaming (call & stress); for bi-directional streaming, only call is supported. Stress test for bi-directional streaming will be finished soon.
+> * After this large scale code updating, it would be a refactory for the code which becomes more or less a mess. :)
+> * Any questions please feel free to open a new issue ~
 
 ## Get Arion
 ```
