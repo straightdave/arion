@@ -135,13 +135,14 @@ Usage of ./postgal:
     	print response in JSON format
   -loop
     	repeatly sending all requests in data file (-df)
+  -m string
+    	unary | client | server | bidirect (default "unary")
   -meta string
     	gRPC metadata (format: 'key1=value1 key2=value2')
   -n uint
     	how many times to send streaming msg to server in one connection (default 10)
   -rate uint
     	expected QPS (query per second) in stress test mode (default 1)
-  -s	streaming mode (now supporting client-side streaming)
   -serve
     	browser mode
   -t string
@@ -202,21 +203,28 @@ point_count:10
 
 ### Call endpoints
 
+First, a simple unary call:
+
 ```
-$ ./postgal -e Hello -d '{"Name": "Dave"}' -h 192.168.0.1:8087
+$ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
 
-> **Tips**
-> * `-e <endpoint name>`, case sensitive.
-> * `-d <data in JSON format>` providing request data in JSON format
-> * `-B <bin data file>` providing request data from binary file
+It calls a gRPC endpoint named as 'hello' on local machine with plain text data (a JSON string).
+
+> **Quick Tips**
+> * `-e <endpoint name>`, case sensitive
+> * `-d <data in JSON format>` provides request data from plain text in JSON format
+> * `-B <bin data file>` reads request data from binary file
 > * If both `-d` and `-B` are given, `-d` will take effect
-> * If `-h` option is not given, postgal uses '0.0.0.0:8087' by default.
+> * If `-h` option is not given, postgal assumes the service is running at '0.0.0.0:8087' by default.
 > * You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 > * If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored
 
+#### prettier response
+
 Using `-json` to format response data in JSON:
+
 ```
 $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
 {
@@ -224,19 +232,73 @@ $ ./postgal -e Hello -d '{"Name": "Dave"}' -json
 }
 ```
 
+#### gRPC metadata or headers
+
 You can use `-meta` to add metadata to the gRPC call:
+
 ```
 $ ./postgal -e Hello -d '{"Name":"dave"}' -meta 'k1=v1 k2=v2 k1=v3'
 ```
 
-#### [experimental] Call via client-side streaming
+#### [experimental] Call via streaming
+
+Now calling via streaming is supported by Arion/Postgal.
+You can use `-m` to provide a stream mode for postgal when calling endpoints:
+
+For example, a client-side streaming call:
+
 ```
-$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -n 10 -h 0.0.0.0:10000
+$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -m client -n 10
 point_count:10
 ```
 
-`-s` indicates it's a streaming call; `-n` means how many times to send the request data into the stream (to server).
+`-m client` indicates it's a client-side streaming call; `-n` (only works in this mode) means how many times to send the request data into the stream (to server).
 Then if the server has a response for this streamed requests, _postgal_ would print that.
+
+The possible value for `-m` could be one of followings (NOT case-sensitive):
+* `unary` : unary call (non-streaming; by default)
+* `client` : client-side streaming
+* `server` : server-side streaming
+* `bidirect` : bidirectional streaming
+
+For server-side streaming, you can use `-m server`:
+
+```
+$ ./postgal -e RouteGuide#ListFeatures -d '{"lo":{"latitude":1,"longitude":-900000000},"hi":{"latitude":923123123,"longitude":923123123}}' -h 0.0.0.0:10000 -m server
+name:"Patriots Path, Mendham, NJ 07945, USA" location:<latitude:407838351 longitude:-746143763 >
+name:"101 New Jersey 10, Whippany, NJ 07981, USA" location:<latitude:408122808 longitude:-743999179 >
+name:"U.S. 6, Shohola, PA 18458, USA" location:<latitude:413628156 longitude:-749015468 >
+name:"5 Conners Road, Kingston, NY 12401, USA" location:<latitude:419999544 longitude:-740371136 >
+... < omit > ...
+name:"3387 Richmond Terrace, Staten Island, NY 10303, USA" location:<latitude:406411633 longitude:-741722051 >
+name:"261 Van Sickle Road, Goshen, NY 10924, USA" location:<latitude:413069058 longitude:-744597778 >
+location:<latitude:418465462 longitude:-746859398 >
+location:<latitude:411733222 longitude:-744228360 >
+name:"3 Hasta Way, Newton, NJ 07860, USA" location:<latitude:410248224 longitude:-747127767 >
+```
+
+In this sample, you send a piece of data and server returns a lot to you (in a stream 'til the end).
+
+And a bidirectional example:
+
+```
+$ ./postgal -e RouteGuide#RouteChat -d '{"location":{"latitude":1,"longitude":-900000000},"message":"hello"}' -h 0.0.0.0:10000 -m bidirect
+finished sending
+0 location:<latitude:1 longitude:-900000000 > message:"hello"
+1 location:<latitude:1 longitude:-900000000 > message:"hello"
+2 location:<latitude:1 longitude:-900000000 > message:"hello"
+3 location:<latitude:1 longitude:-900000000 > message:"hello"
+4 location:<latitude:1 longitude:-900000000 > message:"hello"
+5 location:<latitude:1 longitude:-900000000 > message:"hello"
+6 location:<latitude:1 longitude:-900000000 > message:"hello"
+... < omit > ...
+
+63 location:<latitude:1 longitude:-900000000 > message:"hello"
+64 location:<latitude:1 longitude:-900000000 > message:"hello"
+read done.
+```
+
+Currently Postal only sends one message in bidirectional streaming. Will improve more complexe logic in the future.
 
 > Here it uses google.golang.org/grpc/examples/route_guide as the streaming server.
 
@@ -296,9 +358,14 @@ It will generate requests like:
 {"Name":"Ultraman-49"}
 ```
 
-#### [experimental] 7. stress test via client-side streaming
+#### [experimental] 7. stress testing for non-unary endpoints (streaming)
+
+Similar to the 'call' section, we need to provide `-m` option to indicate in which kind of mode to call the endpoints. Currently we only support some simple logic to do the stress test against streaming endpoints, mainly focus on concurrent connections (`-N`) as workload. No metrics (e.g. latencies) will be measured for now.
+
+For example, a client-side streaming one, you can use `-N` to set concurrent connections and use `-duration` to indicate how long will the test lasts:
+
 ```
-$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -s -x -N 5 -h 0.0.0.0:10000
+$ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -x -duration 10s -m client -N 5 -h 0.0.0.0:10000
 Massive Call on RouteGuide#RecordRoute ...
 [# 3] response: point_count:302204 elapsed_time:10
 [# 4] response: point_count:301157 elapsed_time:10
@@ -307,7 +374,11 @@ Massive Call on RouteGuide#RecordRoute ...
 [# 1] response: point_count:303236 elapsed_time:10
 ```
 
-`-N` is the concurrent connection number. `-duration` can be used here to indicate the stress test duration (by default 10s).
+`-N` is the concurrent connection number. `-duration` (same used as in unary stress test) can be used here to indicate the stress test duration (by default 10s). During the time, client will keep sending the data to the server.
+
+For server-side streaming, we also use `-N` and `-duration`, similar to client-side example above (except the tons of response messages to output).
+
+Stress test for Bi-directional streaming has not yet been supported so far.
 
 > **NOTE**
 > * Currently no metrics are supported.
