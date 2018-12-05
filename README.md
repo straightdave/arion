@@ -197,7 +197,7 @@ This is one handy tool currently for testing purpose.
 
 ### Using binary data file
 ```
-$ ./postgal -e RouteGuide#RecordRoute -B ddd.dat -h 0.0.0.0:10000 -s -n 10
+$ ./postgal -e RouteGuide#RecordRoute -B ddd.dat -h 0.0.0.0:10000 -m client -n 10
 point_count:10
 ```
 
