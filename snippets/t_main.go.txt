@@ -370,10 +370,6 @@ func genRenderData() {
 				if p.IsPointer && p.Name == "in" {
 					endData.ReqType = p.BaseType
 					reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(p.BaseType).First()
-					if reqstru == nil {
-						fmt.Printf("ERR: Cannot find the entity in lesphina cache with name:in and type:%s\n", p.BaseType)
-						return
-					}
 					if st, ok := reqstru.(*lesphina.Struct); ok {
 						for _, f := range st.Fields {
 							endData.ReqElements = append(endData.ReqElements, ElementData{
@@ -384,10 +380,8 @@ func genRenderData() {
 						}
 						break
 					}
-					fmt.Printf("ERR: Cannot read fields of type:%s\n", p.BaseType)
-					return
+					// if not found in lesphina, this req type would not count any sub elements
 				}
-
 				// Will check response parameters for streaming req/resp parameter types
 			}
 
@@ -396,10 +390,6 @@ func genRenderData() {
 				if p.IsPointer {
 					endData.RespType = p.BaseType
 					reqstru := _les.Query().ByKind(lesphina.KindStruct).ByName(p.BaseType).First()
-					if reqstru == nil {
-						fmt.Printf("ERR: Cannot find the entity in lesphina cache with name:in and type:%s\n", p.BaseType)
-						return
-					}
 					if st, ok := reqstru.(*lesphina.Struct); ok {
 						for _, f := range st.Fields {
 							endData.RespElements = append(endData.RespElements, ElementData{
@@ -410,8 +400,6 @@ func genRenderData() {
 						}
 						break
 					}
-					fmt.Printf("ERR: Cannot read fields of type:%s\n", p.BaseType)
-					return
 				}
 
 				// streaming (client-side or bi-dir) naming in the pattern of 'xxxx_xxxxClient'
@@ -431,11 +419,6 @@ func genRenderData() {
 								endData.ReqType = m.In[0].BaseType
 
 								reqT := _les.Query().ByKind(lesphina.KindStruct).ByName(endData.ReqType).First()
-								if reqT == nil {
-									fmt.Printf("ERR: Cannot find the struct:%s\n", endData.ReqType)
-									return
-								}
-
 								if t, ok := reqT.(*lesphina.Struct); ok {
 									for _, f := range t.Fields {
 										endData.ReqElements = append(endData.ReqElements, ElementData{
@@ -452,11 +435,6 @@ func genRenderData() {
 								endData.RespType = m.Out[0].BaseType
 
 								respT := _les.Query().ByKind(lesphina.KindStruct).ByName(endData.RespType).First()
-								if respT == nil {
-									fmt.Printf("ERR: Cannot find the struct:%s\n", endData.RespType)
-									return
-								}
-
 								if t, ok := respT.(*lesphina.Struct); ok {
 									for _, f := range t.Fields {
 										endData.RespElements = append(endData.RespElements, ElementData{
