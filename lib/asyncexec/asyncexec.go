@@ -21,6 +21,7 @@ var (
 	yellow = color.New(color.FgYellow).SprintFunc()
 )
 
+// AsyncExec is executable itself
 type AsyncExec struct {
 	Name      string
 	Dir       string
@@ -35,6 +36,7 @@ type AsyncExec struct {
 	end      func()
 }
 
+// SetEnv sets env
 func (ae *AsyncExec) SetEnv(key, value string) {
 	if ae.Env == nil {
 		ae.Env = make(map[string]string)
@@ -42,6 +44,7 @@ func (ae *AsyncExec) SetEnv(key, value string) {
 	ae.Env[key] = value
 }
 
+// Start starts execution
 func (ae *AsyncExec) Start() error {
 	cmd := exec.Command(ae.Name, ae.Args...)
 	if ae.Dir != "" {
@@ -54,8 +57,6 @@ func (ae *AsyncExec) Start() error {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
-
-	// fmt.Printf("Cmd => %+v\n", cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -106,7 +107,7 @@ func (ae *AsyncExec) Start() error {
 	return nil
 }
 
-// StartWithTimeout: The blocking verison of Start()
+// StartWithTimeout is the blocking verison of Start()
 func (ae *AsyncExec) StartWithTimeout(timeout time.Duration) error {
 	ae.complete = make(chan struct{})
 	ae.end = func() {
@@ -134,7 +135,6 @@ func (ae *AsyncExec) endWithFatal() {
 		}
 	}
 
-	// internal use
 	if ae.end != nil {
 		ae.end()
 	}
