@@ -66,11 +66,11 @@ complete
 ```
 
 > **Tips**
-> * Using `-u` option to force-update local dependencies. It's required (once) if some underlying packages are not up-to-date.
+> * Using `-u` flag to force-update underlying dependencies. It's required (once) if some underlying packages are not up-to-date.
 > * Using `-verbose` option to have more output during execution of command.
-> * Using `-o <custom-name>` to call the binary a _custom-name_ rather than _postgal_.
+> * Using `-o <custom-name>` to name the binary a custom name rather than _postgal_.
 
-Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary called **postgal** in it.
+Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary named as **postgal** in it.
 
 ### Cross-build
 If you want Arion to build the _postgal_ working on another platform (e.g linux/amd64), you can use `-cross` option:
@@ -79,10 +79,15 @@ If you want Arion to build the _postgal_ working on another platform (e.g linux/
 $ arion -src <your.any.pb.go> -cross 'GOOS=linux GOARCH=amd64'
 ```
 > **Tips**
-> * There are only several valid pairs like linux/amd64, etc.
-> * Experimental. Sometimes it fails :smile:. In that case, you can go to source code folder and do the cross-build yourself.
+> * There are only several valid pairs supported like linux/amd64, etc.
+> * Experimental. Sometimes it fails :smile:. In that case, you can go to source code folder and do the cross-build yourself:
+```
+$ GOOS=linux GOARCH=amd64 go build -o my_postgal_linux
+```
 
 ## List *postgals*
+
+A trivial helper command to show how many _postgals_ you generated at the location.
 
 ```
 $ arion -l
@@ -102,7 +107,7 @@ Generated:  Wed Jun 20 23:40:51 CST 2018
 Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ```
-> Arion looks for _postgal_ in current and all `./temp*` folders
+> It looks for _postgals_ binaries in current working path and all `./temp*` folders.
 
 ## Usage of `postgal`
 
@@ -156,19 +161,27 @@ Usage of ./postgal:
 **TL;DR**, let's see some examples below.
 
 ## Console Mode
-To use _postgal_ in command line.
+Use _postgal_ as a command line tool.
 
 ### Read endpoint list
 
-_postgal_ can list simple endpoints of gRPC services defined in your pb.go file.
-You can use `-i` simply to see whether your PostGal is ok or not:
+The _postgal_ can list simple endpoints of gRPC services defined in your `pb.go` file with `-i` flag.
+It would show the service names (yes! plural) and their endpoints like this:
+
 ```
 $ ./postgal -i
 Myapp
 > Hello
 ```
 
+A simple `-i` command like this is usually used to check the generated _postgal_ is working.
+
+
 ### Read endpoint info
+
+Still with `-i` which indicates it's the getting-information mode, then a `-e` with the endpoint name given.
+Of note if there's several services defined in the `pb.go` you should give full name of the endpoint `<service>#<endpoint>`.
+This would show the request and response details:
 
 ```
 $ ./postgal -i -e Hello
@@ -179,8 +192,13 @@ Myapp#Hello
 --- Message string (json field name: Message)
 ```
 
+This command gives a clue about request data. Later you have to compose a request data in the format of JSON.
+The fields and data types are from here.
+
 ### Read data entity details
-For instance, to get the type definition of entity _HelloRequest_:
+
+Sometimes you have to know details about a custom data type (e.g struct).
+You can use `-t` with a data type name:
 
 ```
 $ ./postgal -i -t HelloRequest
@@ -188,14 +206,18 @@ $ ./postgal -i -t HelloRequest
 ```
 
 ### Generate binary data file from JSON
+
+A good helper command to generate request data file for later use, especially in streaming modes or stress test.
+It converts the JSON data (indicated by `-d`) to the binary file (indicated by `-G`).
+This would not fire the request.
+
 ```
 $ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123,"longitude":123}' -G ddd.dat
 [8 123 16 123]
 ```
 
-This is one handy tool currently for testing purpose.
+An example of using binary data file:
 
-### Using binary data file
 ```
 $ ./postgal -e RouteGuide#RecordRoute -B ddd.dat -h 0.0.0.0:10000 -m client -n 10
 point_count:10
@@ -203,21 +225,20 @@ point_count:10
 
 ### Call endpoints
 
-First, a simple unary call:
+First, a simplest unary call:
 
 ```
 $ ./postgal -e Hello -d '{"Name": "Dave"}'
 Message: Hello Dave
 ```
 
-It calls a gRPC endpoint named as 'hello' on local machine with plain text data (a JSON string).
+It calls a gRPC endpoint named 'hello' hosted at local machine.
 
-> **Quick Tips**
-> * `-e <endpoint name>`, case sensitive
-> * `-d <data in JSON format>` provides request data from plain text in JSON format
-> * `-B <bin data file>` reads request data from binary file
-> * If both `-d` and `-B` are given, `-d` will take effect
-> * If `-h` option is not given, postgal assumes the service is running at '0.0.0.0:8087' by default.
+> * `-e <endpoint name>` indicates the endpoint name to invoke, case sensitive.
+> * `-d <data in JSON format>` provides request data from plain text in JSON format.
+> * `-B <bin data file>`, if given, it will read request data from binary file instead.
+> * If both `-d` and `-B` are given, `-d` will take effect.
+> * If `-h` option (the host) is not given, postgal assumes the service is running at '0.0.0.0:8087' by default.
 > * You can compose the JSON request data based on the knowledge you get by using `-i -t` or `-i -e`
 > * If the type of request object is `protobuf.Empty`, the data given by `-d` option would be ignored
 
@@ -240,12 +261,14 @@ You can use `-meta` to add metadata to the gRPC call:
 $ ./postgal -e Hello -d '{"Name":"dave"}' -meta 'k1=v1 k2=v2 k1=v3'
 ```
 
-#### [experimental] Call via streaming
+The value of `-meta` is a plain string of k-v pairs seperated by spaces.
+Keys can duplicate and later one wins.
+For more details please refer to https://github.com/grpc/grpc-go/blob/master/Documentation/grpc-metadata.md
 
-Now calling via streaming is supported by Arion/Postgal.
-You can use `-m` to provide a stream mode for postgal when calling endpoints:
+#### [experimental] Call in streaming modes
 
-For example, a client-side streaming call:
+Invoking via streaming is supported.
+You can use `-m` to indicate a stream mode when calling endpoints:
 
 ```
 $ ./postgal -e RouteGuide#RecordRoute -d '{"latitude":123, "longitude":123}' -m client -n 10
@@ -256,12 +279,12 @@ point_count:10
 Then if the server has a response for this streamed requests, _postgal_ would print that.
 
 The possible value for `-m` could be one of followings (NOT case-sensitive):
-* `unary` : unary call (non-streaming; by default)
+* `unary` : unary call (non-streaming; wichi is the DEFAULT mode)
 * `client` : client-side streaming
 * `server` : server-side streaming
 * `bidirect` : bidirectional streaming
 
-For server-side streaming, you can use `-m server`:
+For server-side streaming, you can use `-m server`. Example:
 
 ```
 $ ./postgal -e RouteGuide#ListFeatures -d '{"lo":{"latitude":1,"longitude":-900000000},"hi":{"latitude":923123123,"longitude":923123123}}' -h 0.0.0.0:10000 -m server
@@ -300,11 +323,20 @@ read done.
 
 Currently Postal only sends one message in bidirectional streaming. Will improve more complexe logic in the future.
 
-> Here it uses google.golang.org/grpc/examples/route_guide as the streaming server.
+> In these examples about Streaming modes, I use google.golang.org/grpc/examples/route_guide as the streaming server.
 
-### Performance test
+### Stress test
+Using `-x`, `-rate` and `-duration` flags.
+* `-x` indicates it's running stress test;
+* `-rate` with an integer indicates the expected QPS you want to reach;
+* `-duration` indicates the duration of the stress test. The string value should be able to convert into `time.Duration`.
+* `-h` indicates the hosts of target service. It could be multiple, seperated by comma: `-h 127.0.0.1:8087,127.0.0.2:8087`.
 
-#### 1. to execute performance tests against one endpoint:
+> **NOTE**
+> If not mentioned, in this section we only talk about stress test in Unary mode.
+
+#### 1. Stress test against one endpoint
+
 ```
 $ ./postgal -e Hello -d '{"Name": "Dave"}' -x -rate 100 -duration 60s
 Massive Call...
@@ -314,38 +346,52 @@ Massive Call...
 > **NOTE**
 > * Again, if omit `-h` option, the default target host is `0.0.0.0:8087`
 > * If only `-x` is specified, it implies `-rate 1 -duration 10s` by default
-> * `-meta` is still available in massive gRPC call; However we only use one set of metadata for all requests. If needed, I'll add this functionality to call with multiple metadata sets.
+> * `-meta` is still available in stress test; However we only use one set of metadata for all requests.
+>   If needed, I'll add the functionality to call with multiple/random metadata sets.
 
-#### 2. data file (only used in `-x` mode)
-You can use `-df` to specify a data file which consists of multiple request data (each in one line) to conduct the massive call:
+#### 2. With a data file (only works in `-x` mode)
+
+You can use `-df` to specify a data file which consists of multiple request data to conduct the massive call.
+One line of plain text JSON data in each line in this file.
+
 ```
 $ ./postgal -e Hello -df ./myreqs.txt -x -rate 10 -duration 30s -loop
 ```
->If you don't use the option `-loop` when using a data file, the massive call will stop after all request data in the file are sent once.
 
-#### 3. worker number (only used in `-x` mode)
+> If you don't use the option `-loop` when using a data file, the massive call will stop after all request data in the file are sent once.
+
+#### 3. With a worker number (only works in `-x` mode)
+
 Using `-worker` to specify a number of worker pool size (maximum concurrent goroutines; default is 10) in performance testing:
+
 ```
 $ ./postgal -e Hello -d '{"Name":"dave"}' -x -rate 10 -duration 30s -worker 16
 ```
 
-#### 4. multiple hosts
+In theory, changing this value larger than the number of your CPU core would have no effect to the result.
+But you can try.
+
+#### 4.With multiple hosts
+
 Also, you can specify a list of IP addresses to execute preformance test against a cluster.
-In this case, `postgal` would send requests to those hosts in a simple (client side) round-robin way.
+In this case, `postgal` would send requests to those hosts in a simple **Client-Side Round-robin** way.
 
 ```
 $ ./postgal -h 192.168.0.1:8087,192.168.0.2:8087 -e Hello -d '{"Name":"dave"}' -x
 ```
 
-#### 5. dump responses (only used in `-x` mode / unary)
-To dump responses to a file:
+#### 5. Dump responses (only works in `-x` mode / unary)
+
 ```
 $ ./postgal -e Hello -d '{"Name":"daveeeeee"}' -x -dumpto responses.dump
 ```
+
 So _postgal_ would serialize all successful responses into JSON format and write them to the file, line by line.
 
-#### [experimental] 6. auto-generated value (`-x` mode and unary only)
+#### [experimental] 6. Auto-generated value (`-x` mode and unary only)
+
 Currently _postgal_ supports to generate unique data per request:
+
 ```
 $ ./postgal -e Hello -d '{"Name":"Ultraman-<<arion:unique:string>>"}' -x -rate 5 -duration 10s
 ```
@@ -356,9 +402,10 @@ It will generate requests like:
 {"Name":"Ultraman-1"}
 ...
 {"Name":"Ultraman-49"}
+...
 ```
 
-#### [experimental] 7. stress testing for non-unary endpoints (streaming)
+#### [experimental] 7. Stress test for non-unary endpoints (streaming modes)
 
 Similar to the 'call' section, we need to provide `-m` option to indicate in which kind of mode to call the endpoints. Currently we only support some simple logic to do the stress test against streaming endpoints, mainly focus on concurrent connections (`-N`) as workload. No metrics (e.g. latencies) will be measured for now.
 
@@ -383,17 +430,21 @@ Stress test for Bi-directional streaming has not yet been supported so far.
 > **NOTE**
 > * Currently no metrics are supported.
 
+---
+
 ## Browser Mode
+
 Browser mode is the graphic way to use _postgal_. Like using Postman(TM).
 
 ```
 $ ./postgal -serve
 ```
-Then open the browser and navigate to `http://localhost:9999`.
+
+Then the webpage is hosted at `http://localhost:9999`.
 
 In the _postgal_ browser mode, you can easily:
-1. Read details about the service, requests and responses
-2. Call endpoints
+1. Read details about the service, request and response definition.
+2. Call endpoints.
 
 ## Development
 
