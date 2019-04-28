@@ -137,43 +137,7 @@ func main() {
 			Worker:         *_worker,
 		}
 
-		svcName, endName := parseEndpointName(req.Endpoint)
-		method, err := getMethodPath(svcName, endName)
-		if err != nil {
-			return
-		}
-
-		if svcName == "" && len(_renderData.Services) > 1 {
-			fmt.Println("ERR: ambiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
-			return
-		}
-
-		if svcName == "" && len(_renderData.Services) == 1 {
-			svcName = _renderData.Services[0].Name
-		}
-
-		req.Method = method
-		req.SvcName = svcName
-		req.EndName = endName
-
-		// guess req/resp type names
-		reqType := req.EndName + "Request"
-		respType := req.EndName + "Response"
-
-	outter:
-		for _, svc := range _renderData.Services {
-			if svc.Name == req.SvcName {
-				for _, e := range svc.Endpoints {
-					if e.Name == req.EndName {
-						reqType = e.ReqType
-						respType = e.RespType
-						break outter
-					}
-				}
-			}
-		}
-		req.RequestTypeName = reqType
-		req.ResponseTypeName = respType
+		guessCallReqFields(req)
 
 		if len(*_binFile) != 0 {
 			d, err := ioutil.ReadFile(*_binFile)
@@ -205,6 +169,46 @@ func main() {
 		}
 		fmt.Println(res)
 	}
+}
+
+func guessCallReqFields(req *CallEndpointRequest) {
+	svcName, endName := parseEndpointName(req.Endpoint)
+	method, err := getMethodPath(svcName, endName)
+	if err != nil {
+		return
+	}
+
+	if svcName == "" && len(_renderData.Services) > 1 {
+		fmt.Println("ERR: ambiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
+		return
+	}
+
+	if svcName == "" && len(_renderData.Services) == 1 {
+		svcName = _renderData.Services[0].Name
+	}
+
+	req.Method = method
+	req.SvcName = svcName
+	req.EndName = endName
+
+	// guess req/resp type names
+	reqType := req.EndName + "Request"
+	respType := req.EndName + "Response"
+
+outter:
+	for _, svc := range _renderData.Services {
+		if svc.Name == req.SvcName {
+			for _, e := range svc.Endpoints {
+				if e.Name == req.EndName {
+					reqType = e.ReqType
+					respType = e.RespType
+					break outter
+				}
+			}
+		}
+	}
+	req.RequestTypeName = reqType
+	req.ResponseTypeName = respType
 }
 
 func guessStreamMode(input string) Mode {
@@ -587,6 +591,9 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 		Metadata:   meta,
 		RespInJSON: respInJson,
 	}
+
+	guessCallReqFields(call)
+
 	res, err := call.Call()
 	if err != nil {
 		log.Println("Err:", err.Error())
