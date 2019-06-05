@@ -54,6 +54,9 @@ var (
 	_isMassive      = flag.Bool("x", false, "stress test mode")
 	_data           = flag.String("d", "", "request data string")
 	_meta           = flag.String("meta", "", "gRPC metadata (format: 'key1=value1 key2=value2')")
+	_maxRecv        = flag.Int("maxrecv", 0, "set max size of received message")
+	_maxSend        = flag.Int("maxsend", 0, "set max size of sending message")
+	_connPerHost    = flag.Uint64("C", 1, "[Unary stress test] number of concurrent connections per each host")
 	_streamMode     = flag.String("m", "unary", "unary | client | server | bidirect")
 	_streamingTimes = flag.Uint("n", 10, "how many times to send streaming msg to server in one connection")
 	_numStream      = flag.Uint("N", 1, "how many concurrent streaming connections when doing stress test mode (-x)")
@@ -135,6 +138,9 @@ func main() {
 			CallDuration:   *_duration,
 			Rate:           *_rate,
 			Worker:         *_worker,
+			MaxRecv:        *_maxRecv,
+			MaxSend:        *_maxSend,
+			ConnPerHost:    *_connPerHost,
 		}
 
 		guessCallReqFields(req)
@@ -152,7 +158,7 @@ func main() {
 		if len(*_genBin) != 0 {
 			err := req.serialize(*_genBin)
 			if err != nil {
-				fmt.Printf("ERR: failed to generate bin file: %v\n", err)
+				fmt.Printf("Failed to generate bin file: %v\n", err)
 			}
 			return
 		}
@@ -179,7 +185,7 @@ func guessCallReqFields(req *CallEndpointRequest) {
 	}
 
 	if svcName == "" && len(_renderData.Services) > 1 {
-		fmt.Println("ERR: ambiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
+		fmt.Println("mbiguous endpoint name; more than one services; please use <svc-name>#<end-name>")
 		return
 	}
 
@@ -647,6 +653,9 @@ type CallEndpointRequest struct {
 	Worker           uint64
 	IsLoop           bool
 	DumpFile         string
+	MaxRecv          int
+	MaxSend          int
+	ConnPerHost      uint64
 }
 
 // Call ...
@@ -658,12 +667,29 @@ func (req *CallEndpointRequest) Call() (response string, err error) {
 		return du2
 	}
 
-	conn, err := grpc.Dial(
-		req.Hostlist[0],
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
-		grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
+	var cos []grpc.CallOption
+	if req.MaxRecv > 0 {
+		cos = append(cos, grpc.MaxCallRecvMsgSize(req.MaxRecv))
+	}
+	if req.MaxSend > 0 {
+		cos = append(cos, grpc.MaxCallSendMsgSize(req.MaxSend))
+	}
 
+	var conn *grpc.ClientConn
+	if len(cos) > 0 {
+		conn, err = grpc.Dial(
+			req.Hostlist[0],
+			grpc.WithDefaultCallOptions(cos...),
+			grpc.WithInsecure(),
+			grpc.WithBlock(),
+			grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
+	} else {
+		conn, err = grpc.Dial(
+			req.Hostlist[0],
+			grpc.WithInsecure(),
+			grpc.WithBlock(),
+			grpc.WithTimeout(max(req.DialTimeout, 5*time.Second)))
+	}
 	if err != nil {
 		return
 	}
@@ -672,22 +698,25 @@ func (req *CallEndpointRequest) Call() (response string, err error) {
 	ctx := metadata.NewOutgoingContext(context.Background(), req.Metadata)
 
 	var replyData proto.Message
-
 	switch req.StreamMode {
+
 	case ClientSide:
 		replyData, err = req.sendClientStream(ctx, conn)
+
 	case ServerSide:
 		err = req.sendServerStream(ctx, conn)
 		if err != nil {
 			log.Printf("ERR: failed to do server streaming: %v", err)
 		}
 		return
+
 	case Bidirectional:
 		err = req.sendBidirectStream(ctx, conn)
 		if err != nil {
 			log.Printf("ERR: failed to do server streaming: %v", err)
 		}
 		return
+
 	default:
 		replyData, err = req.unaryCall(ctx, conn)
 	}
@@ -772,6 +801,7 @@ func (req *CallEndpointRequest) Massive() {
 		return
 	}
 
+	// Unary stress call
 	var target *trunks.Gtarget
 	if req.DataFile != "" {
 		target = prepMultipleReqTarget(req)
@@ -782,15 +812,17 @@ func (req *CallEndpointRequest) Massive() {
 		return
 	}
 
-	fmt.Println("Max workers:", req.Worker)
+	fmt.Printf("%d connection(s) per host, %d host(s)\n", req.ConnPerHost, len(req.Hostlist))
 
 	burner, err := trunks.NewBurner(
 		req.Hostlist,
+		trunks.WithMaxRecvSize(req.MaxRecv),
+		trunks.WithMaxSendSize(req.MaxSend),
+		trunks.WithNumConnPerHost(req.ConnPerHost),
 		trunks.WithLooping(req.IsLoop),
 		trunks.WithNumWorker(req.Worker),
 		trunks.WithDumpFile(req.DumpFile),
 		trunks.WithMetadata(req.Metadata))
-
 	if err != nil {
 		panic(err)
 	}
