@@ -115,6 +115,8 @@ Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 Usage of ./postgal:
   -B string
     	protobuf binary data file
+  -C uint
+    	[Unary stress test] number of concurrent connections per each host (default 1)
   -G string
     	the bin file name to generate
   -N uint
@@ -142,6 +144,10 @@ Usage of ./postgal:
     	repeatly sending all requests in data file (-df)
   -m string
     	unary | client | server | bidirect (default "unary")
+  -maxrecv int
+    	set max size of received message
+  -maxsend int
+    	set max size of sending message
   -meta string
     	gRPC metadata (format: 'key1=value1 key2=value2')
   -n uint
@@ -348,6 +354,12 @@ Massive Call...
 > * If only `-x` is specified, it implies `-rate 1 -duration 10s` by default
 > * `-meta` is still available in stress test; However we only use one set of metadata for all requests.
 >   If needed, I'll add the functionality to call with multiple/random metadata sets.
+
+**Experimental** `-C` option to specify the concurrent connections to one host:
+```
+$ ./postgal -e Hello -d '{"Name":"dave"}' -x -C 5 -h 127.0.0.1:8087,127.0.0.2:8087
+```
+This will create 10 concurrent connections (5 per each host) and use these 10 connections in a client-side-round-robin way.
 
 #### 2. With a data file (only works in `-x` mode)
 
