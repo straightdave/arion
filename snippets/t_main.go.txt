@@ -263,11 +263,11 @@ func genAndPrintEndpointInfo(raw string) {
 				fmt.Printf("%s#%s\n", svc.Name, end.Name)
 				fmt.Println("- Request entity:", end.ReqType)
 				for _, req := range end.ReqElements {
-					fmt.Printf("--- %s %s (json field name: %s)\n", req.Name, req.Type, req.JsonFieldName)
+					fmt.Printf("--- %s %s (JSON field name: %s)\n", req.Name, req.Type, req.JSONFieldName)
 				}
 				fmt.Println("- Response entity:", end.RespType)
 				for _, res := range end.RespElements {
-					fmt.Printf("--- %s %s (json field name: %s)\n", res.Name, res.Type, res.JsonFieldName)
+					fmt.Printf("--- %s %s (JSON field name: %s)\n", res.Name, res.Type, res.JSONFieldName)
 				}
 				break
 			}
@@ -279,7 +279,7 @@ func genAndPrintTypeInfo(typeName string) {
 	for _, t := range _renderData.Reference {
 		if t.Name == typeName {
 			for _, f := range t.Fields {
-				fmt.Printf("- %s %s (json field name: %s)\n", f.Name, f.Type, f.JsonFieldName)
+				fmt.Printf("- %s %s (JSON field name: %s)\n", f.Name, f.Type, f.JSONFieldName)
 			}
 			break
 		}
@@ -343,7 +343,7 @@ type EndpointData struct {
 type ElementData struct {
 	Name          string
 	Type          string
-	JsonFieldName string
+	JSONFieldName string
 }
 
 func genRenderData() {
@@ -385,7 +385,7 @@ func genRenderData() {
 							endData.ReqElements = append(endData.ReqElements, ElementData{
 								Name:          f.Name,
 								Type:          f.BaseType,
-								JsonFieldName: f.JsonFieldName(),
+								JSONFieldName: f.JSONFieldName(),
 							})
 						}
 						break
@@ -405,7 +405,7 @@ func genRenderData() {
 							endData.RespElements = append(endData.RespElements, ElementData{
 								Name:          f.Name,
 								Type:          f.BaseType,
-								JsonFieldName: f.JsonFieldName(),
+								JSONFieldName: f.JSONFieldName(),
 							})
 						}
 						break
@@ -434,7 +434,7 @@ func genRenderData() {
 										endData.ReqElements = append(endData.ReqElements, ElementData{
 											Name:          f.Name,
 											Type:          f.BaseType,
-											JsonFieldName: f.JsonFieldName(),
+											JSONFieldName: f.JSONFieldName(),
 										})
 									}
 								}
@@ -450,7 +450,7 @@ func genRenderData() {
 										endData.RespElements = append(endData.RespElements, ElementData{
 											Name:          f.Name,
 											Type:          f.BaseType,
-											JsonFieldName: f.JsonFieldName(),
+											JSONFieldName: f.JSONFieldName(),
 										})
 									}
 								}
@@ -483,7 +483,7 @@ func genRenderData() {
 			structData.Fields = append(structData.Fields, ElementData{
 				Name:          f.Name,
 				Type:          f.RawType,
-				JsonFieldName: f.JsonFieldName(),
+				JSONFieldName: f.JSONFieldName(),
 			})
 		}
 		_renderData.Reference = append(_renderData.Reference, structData)
@@ -524,13 +524,13 @@ func handleGetType(w http.ResponseWriter, r *http.Request) {
 	switch t.GetKind() {
 	case lesphina.KindFunction:
 		tt := t.(*lesphina.Function)
-		io.WriteString(w, tt.Json())
+		io.WriteString(w, tt.JSON())
 	case lesphina.KindStruct:
 		tt := t.(*lesphina.Struct)
-		io.WriteString(w, tt.Json())
+		io.WriteString(w, tt.JSON())
 	case lesphina.KindElement:
 		tt := t.(*lesphina.Element)
-		io.WriteString(w, tt.Json())
+		io.WriteString(w, tt.JSON())
 	default:
 		io.WriteString(w, `{"err":"unknown or unsupport type"}`)
 	}
@@ -538,7 +538,7 @@ func handleGetType(w http.ResponseWriter, r *http.Request) {
 
 func handleGetLesphinaMeta(w http.ResponseWriter, r *http.Request) {
 	defer recoverHandling(w)
-	io.WriteString(w, _les.Meta.Json())
+	io.WriteString(w, _les.Meta.JSON())
 }
 
 func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -567,10 +567,10 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var respInJson bool
+	var respInJSON bool
 	respFormat := v.Get("format")
 	if strings.ToLower(respFormat) == "json" {
-		respInJson = true
+		respInJSON = true
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
@@ -595,7 +595,7 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 		Endpoint:   endpointName,
 		DataInJSON: data,
 		Metadata:   meta,
-		RespInJSON: respInJson,
+		RespInJSON: respInJSON,
 	}
 
 	guessCallReqFields(call)
