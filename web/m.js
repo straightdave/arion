@@ -39,7 +39,7 @@ function invokeCall(element) {
 }
 
 function callEndpoint(name, body) {
-    console.log("call endpoint. name="+name+", body="+body)
+    console.log("call endpoint. name="+name)
     var arionPort = document.getElementById("arion-port").value
     var rawAddr = document.getElementById("in-hostaddress").value
     if (rawAddr.trim() === "") {rawAddr = "0.0.0.0:8087"}
@@ -47,7 +47,25 @@ function callEndpoint(name, body) {
     var url = "http://localhost:"+arionPort+"/call?e="+name+"&h="+rawAddr+"&format=json"
     console.log("calling url: "+url)
     var outputElement = document.getElementById("invokeresult"+name)
-    simpleAjaxCall("POST", url, body, function(resp) {
+    outputElement.innerHTML = ''
+    // HACK: original body contains both json request data and grpc meta
+    var newBody = body
+    var newMeta = null
+    if (body.includes('\nmeta:\n')) {
+        var tmp = body.split('\nmeta:\n')
+        if (tmp.length>=1) { newBody=tmp[0] }
+        if (tmp.length>=2) {
+            try { newMeta=JSON.parse(tmp[1]) } catch(e) {
+                outputElement.innerHTML = "<pre>"+e+"</pre>"
+                return
+            }
+        }
+    }
+    try { var ttt = JSON.parse(newBody) } catch (e) {
+        outputElement.innerHTML = "<pre>"+e+"</pre>"
+        return
+    }
+    simpleAjaxCall("POST", url, newBody, newMeta, function(resp) {
         outputElement.innerHTML = "<pre>"+resp+"</pre>"
     })
 }
@@ -64,10 +82,15 @@ function textareaKeyup(event, textarea) {
     }
 }
 
-function simpleAjaxCall(method, url, body, cbOK, cbErr) {
+function simpleAjaxCall(method, url, body, metaDic, cbOK, cbErr) {
     var xhr = new XMLHttpRequest()
     xhr.open(method, url, true)
     xhr.setRequestHeader("Content-type", "application/json")
+    if (metaDic && typeof(metaDic)==='object') {
+        Object.keys(metaDic).forEach(function(k) {
+            xhr.setRequestHeader("gmeta-"+k,metaDic[k])
+        })
+    }
     xhr.onload = function(e) {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {

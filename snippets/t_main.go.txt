@@ -582,10 +582,10 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 	data := string(body)
 
 	// parse grpc metadata in http request header
-	var meta metadata.MD
+	meta := make(metadata.MD)
 	for k, v := range r.Header {
-		if strings.HasPrefix(k, "gmeta-") {
-			realKey := strings.TrimPrefix(k, "gmeta-")
+		if strings.HasPrefix(k, "Gmeta-") { // first letter auto converted to capitalized
+			realKey := strings.TrimPrefix(k, "Gmeta-")
 			meta.Set(realKey, v...) // v is []string
 		}
 	}
@@ -597,6 +597,8 @@ func handleCallEndpoint(w http.ResponseWriter, r *http.Request) {
 		Metadata:   meta,
 		RespInJSON: respInJSON,
 	}
+	log.Printf("call endpoint: %s \n\thosts: %v \n\tdata: %s \n\tmeta: %#v",
+		call.Endpoint, call.Hostlist, call.DataInJSON, call.Metadata)
 
 	guessCallReqFields(call)
 
