@@ -18,13 +18,15 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/straightdave/arion/lib/asyncexec"
 	gozip "github.com/straightdave/gozip/lib"
 	"github.com/straightdave/lesphina"
+
+	"github.com/straightdave/arion/lib/asyncexec"
 )
 
 var (
 	fSourceFile   = flag.String("src", "", "source pb.go file")
+	fMockServer   = flag.Bool("mock", false, "whether to generate mock server")
 	fOutputFile   = flag.String("o", "", "output executable binary file")
 	fGoGetUpdate  = flag.Bool("u", false, "update dependencies when building Postgal")
 	fListPostgals = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
@@ -47,7 +49,7 @@ func main() {
 	}
 
 	if *fSourceFile == "" {
-		log.Fatalln("sourceFile cannot be blank")
+		log.Fatalf("SourceFile cannot be blank")
 	}
 
 	baseName := filepath.Base(*fSourceFile)
@@ -56,41 +58,59 @@ func main() {
 		baseName = baseName[:indexOfDot]
 	}
 
-	tmpDir, err := ioutil.TempDir(".", "temp-"+baseName+"-")
+	var tmpDir string
+	var err error
+
+	if *fMockServer {
+		tmpDir, err = ioutil.TempDir(".", "temp-"+baseName+"-mock-")
+	} else {
+		tmpDir, err = ioutil.TempDir(".", "temp-"+baseName+"-")
+	}
 	if err != nil {
-		log.Fatalln("cannot create temp dir:", err.Error())
+		log.Fatalf("Cannot create temp dir: %v", err)
 	}
 
-	// modify package name of the pb.go file
+	// modify package name of the pb.go file (to 'main')
 	err = genTempPbFile(*fSourceFile, tmpDir, "pb")
 	if err != nil {
-		log.Fatalln("failed to gen new pb:", err.Error())
+		log.Fatalf("Failed to change pb.go's package name: %v", err)
 	}
 
-	// generate source code of meta info used by Lesphina
-	err = genMetaFile(*fSourceFile, tmpDir, "meta")
-	if err != nil {
-		log.Fatalln("failed to gen meta:", err.Error())
+	if *fMockServer {
+		log.Printf("Generating Mock Server ...")
+
+		err = genMockServer(*fSourceFile, tmpDir)
+		if err != nil {
+			log.Fatalf("Failed to generate mock server: %v", err)
+		}
+	} else {
+		log.Println("Generating Postgal ...")
+
+		// generate source code of meta info used by Lesphina
+		err = genMetaFile(*fSourceFile, tmpDir, "meta")
+		if err != nil {
+			log.Fatalf("Failed to gen meta: %v", err)
+		}
+
+		// restore main.go
+		err = restoreFile(_compressedMain, tmpDir, "main")
+		if err != nil {
+			log.Fatalf("Failed to restore main: %v", err)
+		}
+
+		// restore static.go
+		err = restoreFile(_compressedStatic, tmpDir, "static")
+		if err != nil {
+			log.Fatalf("Failed to restore static: %v", err)
+		}
 	}
 
-	// restore main.go
-	err = restoreFile(_compressedMain, tmpDir, "main")
-	if err != nil {
-		log.Fatalln("failed to restore main:", err.Error())
-	}
-
-	// restore static.go
-	err = restoreFile(_compressedStatic, tmpDir, "static")
-	if err != nil {
-		log.Fatalln("failed to restore static:", err.Error())
-	}
-
-	// compile all
+	// finally compile all *.go files generated in tmpDir
 	err = compileDir(tmpDir, *fOutputFile, *fCrossBuild, *fGoGetUpdate, *fVerbose)
 	if err != nil {
-		log.Fatalln("failed to compile:", err.Error())
+		log.Fatalf("Failed to compile: %v", err)
 	}
-	log.Println(green("SUCCESS"))
+	log.Printf(green("SUCCESS"))
 }
 
 func listPostgals() {
@@ -143,7 +163,7 @@ func genTempPbFile(sourceFile, dirName, fileName string) error {
 
 	fullName := filepath.Join(dirName, fileName)
 	fullName = strings.TrimRight(fullName, ".go") + ".go"
-	log.Println("generating new pb file:", fullName)
+	log.Println("Generating new pb file:", fullName)
 
 	f, err := os.Create(fullName)
 	if err != nil {
@@ -164,6 +184,108 @@ func genTempPbFile(sourceFile, dirName, fileName string) error {
 		fmt.Fprintln(writer, line)
 	}
 	return writer.Flush()
+}
+
+type tplDataForMockServer struct {
+	PBRegisterServerFunc string
+	PBServerInterface    string
+	Methods              []tplMethod
+}
+
+type tplMethod struct {
+	Name         string
+	RequestType  string
+	ResponseType string
+}
+
+func genMockServer(pbFile, dirName string) error {
+	les, err := lesphina.Read(pbFile)
+	if err != nil {
+		return err
+	}
+
+	serverInterfaces := les.Query().ByKind(lesphina.KindInterface).ByName("~Server").All()
+	if len(serverInterfaces) > 1 {
+		log.Printf("Warning: more than 1 '~Server' interfaces found. Currently Arion only supports 1. So use the first.")
+	}
+	serverInterface, ok := serverInterfaces[0].(*lesphina.Interface)
+	if !ok {
+		return fmt.Errorf("failed to convert interface data")
+	}
+	log.Printf("Read server interface: %s\n", serverInterface.GetName())
+
+	var methods []tplMethod
+	for _, m := range serverInterface.Methods {
+		// only collect unary method (not supporting streaming for now).
+		// unary method will use pattern: <MethodName>(context.Context, *pb.XXXXRequest) (*pb.XXXXResponse, error)
+		// (req/resp type name may vary, not with Request/Response suffix),
+		// So, skip if input params are more than 2, and the first in-param is not 'context'.
+		if len(m.InParams()) != 2 || len(m.OutParams()) != 2 {
+			continue
+		}
+		if !strings.Contains(m.InParams()[0].BaseType, "context") {
+			continue
+		}
+
+		methods = append(methods, tplMethod{
+			Name:         m.Name,
+			RequestType:  m.InParams()[1].BaseType, // excluding '*'
+			ResponseType: m.OutParams()[0].BaseType,
+		})
+	}
+
+	var regSvrFunc string
+	regSvrFuncs := les.Query().ByKind(lesphina.KindFunction).ByName("Register~").All()
+	for _, f := range regSvrFuncs {
+		if strings.HasSuffix(f.GetName(), "Server") {
+			regSvrFunc = f.GetName()
+			break
+		}
+	}
+	if regSvrFunc == "" {
+		return fmt.Errorf("cannot find 'Register~Server' function in source file")
+	}
+
+	tplData := &tplDataForMockServer{
+		PBRegisterServerFunc: regSvrFunc,
+		PBServerInterface:    serverInterface.GetName(),
+		Methods:              methods,
+	}
+
+	log.Printf("[debug] tpl data: %+v", tplData)
+
+	err = genMockServerSource(_compressedMockMain, "mockmain", dirName, "main.go", tplData)
+	if err != nil {
+		log.Printf("failed to generate mock main.go: %v", err)
+		return err
+	}
+
+	err = genMockServerSource(_compressedMockGRPCServer, "mockgrpc", dirName, "grpc_server.go", tplData)
+	if err != nil {
+		log.Printf("failed to generate mock grpc_server.go: %v", err)
+		return err
+	}
+
+	err = restoreFile(_compressedMockHTTPServer, dirName, "http_server.go")
+	if err != nil {
+		log.Printf("failed to restore mock http_server.go: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func genMockServerSource(raw, tplName, dirName, fileName string, tplData interface{}) error {
+	tpl, err := template.New(tplName).Parse(gozip.DecompressString(raw))
+	if err != nil {
+		return err
+	}
+	tf, err := os.Create(path.Join(dirName, fileName))
+	if err != nil {
+		return err
+	}
+	defer tf.Close()
+	return tpl.Execute(tf, tplData)
 }
 
 func getFileMD5(fileName string) (checksum string, err error) {
@@ -208,6 +330,7 @@ func genMetaFile(pbFile, dirName, fileName string) error {
 		lesTypeList = append(lesTypeList, s.GetName())
 	}
 
+	// _compressedMeta comes from 'main2.go' which is generated by Arion Build.
 	tpl, err := template.New("meta").Parse(gozip.DecompressString(_compressedMeta))
 	if err != nil {
 		return err
@@ -259,7 +382,11 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}
 
 	if binOutputName == "" {
-		binOutputName = "postgal"
+		if *fMockServer {
+			binOutputName = "mock"
+		} else {
+			binOutputName = "postgal"
+		}
 	}
 
 	cDir, err := os.Getwd()

@@ -9,81 +9,111 @@
 
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
-Arion is a tool to help develop and test gRPC service.
-Arion can generate test clients (called **postgal** by default) based on `*.pb.go` files.
+Arion is a powerful gRPC toolkit.
+Based on the gRPC definition file `*.pb.go`, Arion can generate:
+1. a sophisticated client (called *postgal* by default)
+2. a mock server (called *mock* by default)
 
-Main features (of postgal) include:
+> If your project is NOT using Golang. You can still use Arion by:
+> 1. Using gRPC generate tool (Golang plugin) to generate `*.pb.go` for your proto;
+> 2. Using Arion to create *postgal* or *mock* based on that `*.pb.go`
+
+Main features of *postgal*:
 - Get information of gRPC services / endpoints / data types
 - Debug gRPC endpoints as `curl` or Postman(TM) does for HTTP
 - Do stress test on gRPC endpoints
-- Support both Unary and Streaming
+- Support:
+    - Unary
+    - Client side streaming
+    - Server side streaming
+    - Bi-directional streaming
 
 > **NOTE**
-> * As of Nov.28, 2018, Arion supports client-side/server-side streaming (call & stress); for bi-directional streaming, only call is supported. Stress test for bi-directional streaming will be supported soon.
-> * After this large scale code updating, it would be a refactory for the code which becomes more or less a mess. :)
-> * Any questions please feel free to open a new issue ~
+> * As of Nov.28, 2018, *postgal* supports client-side/server-side streaming (call & stress); for bi-directional streaming, only calling is supported. Stress test for bi-directional streaming will be supported soon.
+
+Main features of *mock*:
+- Set your mock response data via HTTP API
+- Only support Unary calls
 
 ## Get Arion
 ```
 $ go get -u github.com/straightdave/arion
 ```
 
-> `-u` option would upgrade Arion if already installed.
+> With `-u` option it would upgrade Arion if already installed.
 
 ## Basic usage of Arion
 
 ```
 $ arion -h
-Usage of arion:
+Usage of ./arion:
   -cross string
-      Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'
-  -l  list Postgals in current folder or all ./temp* folders
+    	Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'
+  -debug
+    	debug mode
+  -l	list Postgals in current folder or all ./temp* folders
+  -mock
+    	whether to generate mock server
   -o string
-      output executable binary file
+    	output executable binary file
   -src string
-      source pb.go file
-  -u  update dependencies when building Postgal
+    	source pb.go file
+  -u	update dependencies when building Postgal
   -verbose
-      print verbose information when building postgals
+    	print verbose information when building postgals
 ```
 
-## Generate _postgal_
+## Generate *mock*
+```
+$ arion -src <your.pb.go> -mock
+```
+
+Sample output:
+```
+2020/03/16 21:23:13 Generating new pb file: temp-helloworld-mock-995970919/pb.go
+2020/03/16 21:23:13 Generating Mock Server ...
+2020/03/16 21:23:13 Read server interface: GreeterServer
+2020/03/16 21:23:13 [debug] tpl data: &{PBRegisterServerFunc:RegisterGreeterServer PBServerInterface:GreeterServer Methods:[{Name:SayHello RequestType:HelloRequest ResponseType:HelloReply}]}
+2020/03/16 21:23:13 creating new source file: temp-helloworld-mock-995970919/http_server.go
+2020/03/16 21:23:13 change dir to /Users/wei.wu/go/src/github.com/straightdave/arion/temp-helloworld-mock-995970919
+2020/03/16 21:23:13 Analyzing dependencies ...
+2020/03/16 21:23:13 Install dependencies ...
+complete
+2020/03/16 21:23:13 Build ...
+complete
+2020/03/16 21:23:14 change dir back to /Users/wei.wu/go/src/github.com/straightdave/arion
+2020/03/16 21:23:14 SUCCESS
+```
+
+If succeeds, you get a temporary folder named as `temp-<My Service Name>-mock-<Timestamp>`,
+inside which you got an executable binary *mock* and the source code.
+
+## Generate *postgal*
+
 ```
 $ arion -src <your.any.pb.go>
-arion -src myapp.pb.go
-2018/10/31 21:50:50 generating new pb file: temp-myapp-829300873/pb.go
-2018/10/31 21:50:50 generating meta source file: temp-myapp-829300873/meta.go
-2018/10/31 21:50:50 creating new source file: temp-myapp-829300873/main.go
-2018/10/31 21:50:50 creating new source file: temp-myapp-829300873/static.go
-2018/10/31 21:50:50 change dir to /Users/straightdave/arion_files/temp-myapp-829300873
-2018/10/31 21:50:50 Analyzing dependencies ...
-2018/10/31 21:50:51 Install dependencies ...
-complete
-2018/10/31 21:50:51 Build ...
-complete
-2018/10/31 21:50:53 change dir back to /Users/straightdave/arion_files
-2018/10/31 21:50:53 SUCCESS
 ```
+
+If succeeds, you get a temporary folder named as `temp-<My Service Name>-<Timestamp>`,
+inside which you got an executable binary *postgal* and the source code.
 
 > **Tips**
 > * Using `-u` flag to force-update underlying dependencies. It's required (once) if some underlying packages are not up-to-date.
 > * Using `-verbose` option to have more output during execution of command.
-> * Using `-o <custom-name>` to name the binary a custom name rather than _postgal_.
+> * Using `-o <custom-name>` to name the binary a custom name rather than the default name.
 
-Then by default Arion will generate a temporary folder containing source files and compile those files into an executable binary named as **postgal** in it.
-
-### Cross-build
-If you want Arion to build the _postgal_ working on another platform (e.g linux/amd64), you can use `-cross` option:
+## Cross build
+If you want Arion to build the *postgal* or *mock* for other platform, you can use `-cross` option:
 
 ```
 $ arion -src <your.any.pb.go> -cross 'GOOS=linux GOARCH=amd64'
 ```
 > **Tips**
-> * There are only several valid pairs supported like linux/amd64, etc.
-> * Experimental. Sometimes it fails :smile:. In that case, you can go to source code folder and do the cross-build yourself:
-```
-$ GOOS=linux GOARCH=amd64 go build -o my_postgal_linux
-```
+> * There are limited valid value pairs, e.g 'linux/amd64'.
+> * Experimental. Sometimes it fails :smile:. In that case, you can do the cross-build yourself with the source code:
+> ```
+> $ GOOS=linux GOARCH=amd64 go build -o my_postgal_linux
+> ```
 
 ## List *postgals*
 
@@ -107,9 +137,40 @@ Generated:  Wed Jun 20 23:40:51 CST 2018
 Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
 
 ```
-> It looks for _postgals_ binaries in current working path and all `./temp*` folders.
+> It looks for _postgal_ binaries in current working path and all `./temp*` folders.
 
-## Usage of `postgal`
+## Usage of *mock*
+*mock* is much easier than *postgal*, so let's talk about it first.
+
+```
+Usage of ./mock:
+  -grpcport string
+    	gRPC server port (default ":50051")
+  -httpport string
+    	HTTP server port (default ":50052")
+```
+
+### Set a mock response
+Call *mock* HTTP API to set a mock response for an endpopint:
+```
+curl -XPUT localhost:50052/resp -d '{"endpointName": "SayHello", "data": { "message": "always this value" } }'
+```
+Request Data:
+```
+{
+    "endpointName": "",
+    "data": <Raw JSON>
+}
+```
+> `<Raw JSON>` must compile to the real request data struct of that endpoint.
+
+### Call gRPC endpoint
+In this example, we using *postgal* as gRPC client:
+```
+./postgal -e SayHello -d '{"message": "value will be ignored"}' -h :50051
+```
+
+## Usage of *postgal*
 
 ```
 Usage of ./postgal:
