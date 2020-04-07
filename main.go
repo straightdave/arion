@@ -32,6 +32,7 @@ var (
 	fListPostgals = flag.Bool("l", false, "list Postgals in current folder or all ./temp* folders")
 	fCrossBuild   = flag.String("cross", "", "Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'")
 	fVerbose      = flag.Bool("verbose", false, "print verbose information when building postgals")
+	fCmdTimeout   = flag.Duration("cmdtimeout", 300*time.Second, "Cmd execution timeout (parsing deps, compiling, etc.)")
 	fDebug        = flag.Bool("debug", false, "debug mode")
 
 	vRegexPackageLine = regexp.MustCompile(`package (.+)`)
@@ -440,7 +441,7 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 	}
 
 	cmdToGetDep.Args = append(cmdToGetDep.Args, deps...)
-	err = cmdToGetDep.StartWithTimeout(300 * time.Second)
+	err = cmdToGetDep.StartWithTimeout(*fCmdTimeout)
 	if err != nil {
 		return err
 	}
@@ -469,14 +470,14 @@ func compileDir(dirName, binOutputName, crossBuild string, usingUpdate, verbose 
 			Name: "go",
 			Args: []string{"get", "-d", "golang.org/x/sys/unix"},
 		}
-		if err := c.StartWithTimeout(60 * time.Second); err != nil {
+		if err := c.StartWithTimeout(*fCmdTimeout); err != nil {
 			return err
 		}
 	}
 
 	log.Println("Build ...")
 	cmdToBuild.Args = append(cmdToBuild.Args, "-o", binOutputName)
-	if err := cmdToBuild.StartWithTimeout(60 * time.Second); err != nil {
+	if err := cmdToBuild.StartWithTimeout(*fCmdTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -490,7 +491,7 @@ func listDepsOfCurrentPackage() ([]string, error) {
 		Args: []string{"-c", raw},
 	}
 
-	if err := cmd.StartWithTimeout(10 * time.Second); err != nil {
+	if err := cmd.StartWithTimeout(*fCmdTimeout); err != nil {
 		return nil, err
 	}
 

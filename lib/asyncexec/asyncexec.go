@@ -124,7 +124,7 @@ func (ae *AsyncExec) StartWithTimeout(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		log.Println(yellow("timeout"))
-		return fmt.Errorf("internal:timeout")
+		return fmt.Errorf("internal:timeout (%v)", timeout)
 	}
 }
 
