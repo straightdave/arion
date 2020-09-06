@@ -1,6 +1,8 @@
 // hand-made build tool for this project:
-// - do texting work while compiling
+// - do rendering work while compiling
 // - serve pages while developing
+// Basically this is a dev tool for Arion.
+
 package main
 
 import (
@@ -16,6 +18,10 @@ import (
 	"text/template"
 
 	gozip "github.com/straightdave/gozip/lib"
+)
+
+const (
+	main2FileName = "z_main2.go"
 )
 
 var (
@@ -57,6 +63,7 @@ func build(targetDir string) {
 		CompressedMeta,
 		CompressedMain,
 		CompressedStatic,
+
 		// for mock server
 		CompressedMockMain,
 		CompressedMockHTTPServer,
@@ -70,35 +77,34 @@ func build(targetDir string) {
 		CompressedMockGRPCServer: compressFileContent(filepath.Join(targetDir, "/templates/mock/grpc_server.go.tpl")),
 	})
 
-	// build
-	log.Printf("Build Arion: Start building ...")
+	log.Printf("Start building ...")
 	output, err := exec.Command("go", "build").CombinedOutput()
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf(string(output))
-	log.Printf("Build Arion: SUCCESS.")
+	if len(output) > 0 {
+		log.Printf(string(output))
+	}
+	log.Printf("SUCCESS ✅")
 }
 
 func generateMain2ForArion(dir string, data interface{}) {
-	log.Printf("Build Arion: Generating main2.go ...")
+	log.Printf("Removing old auto-generated files ...")
 
-	// remove existing main2~ under dir
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	for _, file := range files {
-		if strings.HasPrefix(file.Name(), "main2") {
-			log.Printf("= removing %s", file.Name())
+		if strings.HasPrefix(file.Name(), "z_") {
+			log.Printf("- removing %s", file.Name())
 			os.Remove(file.Name())
 		}
 	}
 
-	// generate main2.go
-	tplName := filepath.Join(dir, "/templates/arion_main2.go.tpl")
-	log.Println("= generating main2.go from template")
+	tplName := filepath.Join(dir, "/templates/z_main2.go.tpl")
+	log.Printf("Generating %s from template %s", main2FileName, tplName)
 	t, err := template.ParseFiles(tplName)
 	if err != nil {
 		log.Fatal(err)
@@ -109,22 +115,15 @@ func generateMain2ForArion(dir string, data interface{}) {
 		log.Fatal(err)
 	}
 
-	fullname := filepath.Join(dir, "main2.go")
+	fullname := filepath.Join(dir, main2FileName)
 	if err := ioutil.WriteFile(fullname, buf.Bytes(), 0666); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("Buidl Arion: main2.go generated.")
+	log.Printf("Generated %s", main2FileName)
 }
 
 func getCompressedStatic(filename string) string {
-	log.Printf("Build Arion: Generate and compress static file %s", filename)
-
-	t, err := template.ParseFiles(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	var (
 		htmlTemplate = compressFileContent(filepath.Join(*targetDir, "/templates/postgal/index.html.tpl"))
 		htmlContent  = compressFileContent(filepath.Join(*targetDir, "/web/index.html"))
@@ -132,6 +131,13 @@ func getCompressedStatic(filename string) string {
 		jsContent    = compressFileContent(filepath.Join(*targetDir, "/web/m.js"))
 		buf          bytes.Buffer
 	)
+
+	log.Printf("Generate and compress static file %s", filename)
+
+	t, err := template.ParseFiles(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := t.Execute(&buf, struct {
 		HTMLSource, CSSSource, JSSource, HTMLTemplate string
@@ -150,20 +156,12 @@ func getCompressedStatic(filename string) string {
 func compressFileContent(filename string) string {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Fatalf("Build Arion: failed to read file %s: %v", filename, err)
+		log.Fatalf("❌ Failed to read file %s: %v", filename, err)
 	}
 	return gozip.CompressString(string(content))
 }
 
-func canBuild() (res bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			res = false
-		}
-	}()
-
-	if _, err := exec.LookPath("go"); err != nil {
-		return false
-	}
-	return true
+func canBuild() bool {
+	_, err := exec.LookPath("go")
+	return err == nil
 }
