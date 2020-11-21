@@ -49,7 +49,7 @@ Main features of mock servers:
 
 ## Get Arion
 ```
-$ go get github.com/straightdave/arion@1.1.1
+$ go get github.com/straightdave/arion@1.1.2
 ```
 
 > New Arion needs **Go mod** support.
