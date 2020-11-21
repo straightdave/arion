@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	gozip "github.com/straightdave/gozip/lib"
-	"github.com/straightdave/lesphina"
+	"github.com/straightdave/lesphina/v2"
 	trunks "github.com/straightdave/trunks/lib"
 )
 
@@ -70,7 +70,7 @@ var (
 	_genBin         = flag.String("G", "", "the bin file name to generate")
 )
 
-var _version, _checksum string
+var _version string
 
 func init() {
 	flag.Parse()
@@ -92,7 +92,6 @@ func main() {
 		}
 		fmt.Printf("Service:\t%s\n", strings.Join(svcNames, ", "))
 		fmt.Printf("Generated:\t%s\n", _version)
-		fmt.Printf("Checksum:\t%s\n", _checksum)
 		return
 	}
 

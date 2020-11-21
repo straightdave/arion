@@ -5,6 +5,7 @@ package main
 
 import (
     "reflect"
+
     "github.com/golang/protobuf/proto"
 )
 
@@ -12,7 +13,6 @@ const _lesDump = "{{ .LesDump }}"
 
 func init() {
     _version  = "{{ .GeneratedTime }}"
-    _checksum = "{{ .Checksum }}"
 }
 
 func getVarByTypeName(typeName string) proto.Message {

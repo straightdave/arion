@@ -59,6 +59,8 @@ func build(targetDir string) {
 	}
 
 	generateMain2ForArion(targetDir, struct {
+		ModFileContent,
+
 		// for postgal
 		CompressedMeta,
 		CompressedMain,
@@ -69,6 +71,7 @@ func build(targetDir string) {
 		CompressedMockHTTPServer,
 		CompressedMockGRPCServer string
 	}{
+		ModFileContent:           compressFileContent(filepath.Join(targetDir, "/templates/go.mod.tpl")),
 		CompressedMeta:           compressFileContent(filepath.Join(targetDir, "/templates/postgal/meta.go.tpl")),
 		CompressedMain:           compressFileContent(filepath.Join(targetDir, "/templates/postgal/main.go.tpl")),
 		CompressedStatic:         getCompressedStatic(filepath.Join(targetDir, "/templates/postgal/web.go.tpl")),
