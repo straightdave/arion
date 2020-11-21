@@ -10,11 +10,13 @@
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
 > **New Update 2020-11**
+>
 > Since new version of protoc and gRPC Go plugin are creating seperate Go source files,
 > one for data structures, another for gRPC stubs.
 > So new version of Arion supports multiple source files.
 
 > **Notice**
+>
 > The gRPC executable client binary was previously called or still mentioned as _postgal_ in below document.
 > as _postgal_ in the document below.
 > Similarly, the executable mock server was previously called or still mentioned as _mock_ in below documant.
@@ -49,7 +51,7 @@ Main features of mock servers:
 
 ## Get Arion
 ```
-$ go get github.com/straightdave/arion@1.1.2
+$ go get github.com/straightdave/arion@1.1.3
 ```
 
 > New Arion needs **Go mod** support.
