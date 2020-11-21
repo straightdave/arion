@@ -9,16 +9,26 @@
 
 [![Build Status](https://travis-ci.org/straightdave/arion.svg?branch=master)](https://travis-ci.org/straightdave/arion)
 
+> **New Update 2020-11**
+> Since new version of protoc and gRPC Go plugin are creating seperate Go source files,
+> one for data structures, another for gRPC stubs.
+> So new version of Arion supports multiple source files.
+
+> **Notice**
+> The gRPC executable client binary was previously called or still mentioned as _postgal_ in below document.
+> as _postgal_ in the document below.
+> Similarly, the executable mock server was previously called or still mentioned as _mock_ in below documant.
+
 Arion is a powerful gRPC toolkit.
-Based on the gRPC definition file `*.pb.go`, Arion can generate:
-1. a sophisticated client (called *postgal* by default)
-2. a mock server (called *mock* by default)
+Based on the gRPC definition files `<service>.pb.go` and/or `<service>_grpc.pb.go`, Arion can generate:
+1. Sophisticated clients
+2. Mock servers
 
 > If your project is NOT using Golang. You can still use Arion by:
-> 1. Using gRPC generate tool (Golang plugin) to generate `*.pb.go` for your proto;
-> 2. Using Arion to create *postgal* or *mock* based on that `*.pb.go`
+> 1. Using `protoc` (and Golang plugin) to generate `*.pb.go` for your proto;
+> 2. Using Arion to create clients or mock servers based on those `*.pb.go`.
 
-Main features of *postgal*:
+Main features of clients:
 - Get information of gRPC services / endpoints / data types
 - Debug gRPC endpoints as `curl` or Postman(TM) does for HTTP
 - Do stress test on gRPC endpoints
@@ -29,41 +39,39 @@ Main features of *postgal*:
     - Bi-directional streaming
 
 > **NOTE**
-> * As of Nov.28, 2018, *postgal* supports client-side/server-side streaming (call & stress); for bi-directional streaming, only calling is supported. Stress test for bi-directional streaming will be supported soon.
+> As of Nov.28, 2018, clients support client-side/server-side streaming (call & stress);
+> For bi-directional streaming, only calling is supported;
+> Stress test for bi-directional streaming will be supported soon.
 
-Main features of *mock*:
+Main features of mock servers:
 - Set your mock response data via HTTP API
 - Only support Unary calls
 
 ## Get Arion
 ```
-$ go get -u github.com/straightdave/arion
+$ go get github.com/straightdave/arion@1.1.1
 ```
 
-> With `-u` option it would upgrade Arion if already installed.
+> New Arion needs **Go mod** support.
 
 ## Basic usage of Arion
 
 ```
 $ arion -h
 Usage of ./arion:
-  -cross string
-    	Cross-platform building flags. e.g 'GOOS=linux GOARCH=amd64'
   -debug
     	debug mode
-  -l	list Postgals in current folder or all ./temp* folders
   -mock
     	whether to generate mock server
   -o string
     	output executable binary file
-  -src string
-    	source pb.go file
-  -u	update dependencies when building Postgal
+  -src strings
+    	source pb.go files seperated with comma
   -verbose
     	print verbose information when building postgals
 ```
 
-## Generate *mock*
+## Generate mock servers
 ```
 $ arion -src <your.pb.go> -mock
 ```
@@ -88,62 +96,25 @@ complete
 If succeeds, you get a temporary folder named as `temp-<My Service Name>-mock-<Timestamp>`,
 inside which you got an executable binary *mock* and the source code.
 
-## Generate *postgal*
+## Generate clients
 
 ```
-$ arion -src <your.any.pb.go>
+$ arion -src service.pb.go,service_grpc.pb.go -o my_service_client
 ```
 
-If succeeds, you get a temporary folder named as `temp-<My Service Name>-<Timestamp>`,
-inside which you got an executable binary *postgal* and the source code.
+If succeeds, you get a temporary folder named as `my_service_client_007371829`,
+inside you get source files as well as an executable binary.
 
 > **Tips**
-> * Using `-u` flag to force-update underlying dependencies. It's required (once) if some underlying packages are not up-to-date.
-> * Using `-verbose` option to have more output during execution of command.
-> * Using `-o <custom-name>` to name the binary a custom name rather than the default name.
+> * Without `-o <custom-name>`, the output directory will be named as `arion_XXXXXXXXX`.
+> * With source files generated, you can build the binary by yourself. For example you can do a cross-build.
 
-## Cross build
-If you want Arion to build the *postgal* or *mock* for other platform, you can use `-cross` option:
+## Usage of mock servers
 
-```
-$ arion -src <your.any.pb.go> -cross 'GOOS=linux GOARCH=amd64'
-```
-> **Tips**
-> * There are limited valid value pairs, e.g 'linux/amd64'.
-> * Experimental. Sometimes it fails :smile:. In that case, you can do the cross-build yourself with the source code:
-> ```
-> $ GOOS=linux GOARCH=amd64 go build -o my_postgal_linux
-> ```
-
-## List *postgals*
-
-A trivial helper command to show how many _postgals_ you generated at the location.
+Mock servers are much simpler than clients, so let's talk about them first.
 
 ```
-$ arion -l
-[-] ./postgal-xxx
-Service:  Myapp
-Generated:  Wed Jun 20 23:40:59 CST 2018
-Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
-
-[-] temp080184789/postgal
-Service:  Myapp
-Generated:  Wed Jun 20 23:40:39 CST 2018
-Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
-
-[-] temp252099608/postgal
-Service:  Myapp
-Generated:  Wed Jun 20 23:40:51 CST 2018
-Checksum: 5de493383a0ec6ad79a7a655ae8aecbf
-
-```
-> It looks for _postgal_ binaries in current working path and all `./temp*` folders.
-
-## Usage of *mock*
-*mock* is much easier than *postgal*, so let's talk about it first.
-
-```
-Usage of ./mock:
+Usage of ./mock-binary:
   -grpcport string
     	gRPC server port (default ":50051")
   -httpport string
@@ -165,15 +136,15 @@ Request Data:
 > `<Raw JSON>` must compile to the real request data struct of that endpoint.
 
 ### Call gRPC endpoint
-In this example, we using *postgal* as gRPC client:
+In this example, we using clients as gRPC client:
 ```
-./postgal -e SayHello -d '{"message": "value will be ignored"}' -h :50051
+./arion_XXXXXXXX -e SayHello -d '{"message": "value will be ignored"}' -h :50051
 ```
 
-## Usage of *postgal*
+## Usage of clients
 
 ```
-Usage of ./postgal:
+Usage of ./arion_XXXXXXXX:
   -B string
     	protobuf binary data file
   -C uint

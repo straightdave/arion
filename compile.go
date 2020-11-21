@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/straightdave/arion/lib/asyncexec"
 	"github.com/straightdave/lesphina/v2"
 )
 
@@ -17,24 +17,17 @@ const (
 	defaultTimeout = 60 * time.Second
 )
 
-func mustCompileDir(dir string, mock, update, verbose bool) {
-	if err := compileDir(dir, mock, update, verbose); err != nil {
+func mustCompileDir(dir string, mock, verbose bool) {
+	if err := compileDir(dir, mock, verbose); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func compileDir(dir string, mock, update, verbose bool) error {
+func compileDir(dir string, mock, verbose bool) error {
 	_, err := exec.LookPath("go")
 	if err != nil {
 		log.Println(yellow("Go compiler seems not installed. Please check your Go toolchain."))
 		return err
-	}
-
-	var outBin string
-	if mock {
-		outBin = "mock"
-	} else {
-		outBin = "postgal"
 	}
 
 	cDir, err := os.Getwd()
@@ -64,50 +57,10 @@ func compileDir(dir string, mock, update, verbose bool) error {
 		}
 	}()
 
-	log.Printf("Analyzing dependencies ...")
-	deps, err := listDepsOfCurrentPackage2()
-	if err != nil {
-		return err
-	}
-
-	debug("deps => %+v\n", deps)
-
-	log.Printf("Install dependencies ...")
-	cmdToGetDep := &asyncexec.AsyncExec{
-		Name: "go",
-		Args: []string{"get", "-d"},
-	}
-
-	if verbose {
-		cmdToGetDep.Args = append(cmdToGetDep.Args, "-v")
-	}
-
-	if update {
-		log.Println(yellow("force updating"))
-		cmdToGetDep.Args = append(cmdToGetDep.Args, "-u", "-f")
-	}
-
-	cmdToGetDep.Args = append(cmdToGetDep.Args, deps...)
-	err = cmdToGetDep.StartWithTimeout(defaultTimeout)
-	if err != nil {
-		return err
-	}
-
-	cmdToBuild := &asyncexec.AsyncExec{
-		Name: "go",
-		Args: []string{"build"},
-	}
-
-	if verbose {
-		cmdToBuild.Args = append(cmdToBuild.Args, "-v")
-	}
-
 	log.Println("Build ...")
-	cmdToBuild.Args = append(cmdToBuild.Args, "-o", outBin)
-	if err := cmdToBuild.StartWithTimeout(defaultTimeout); err != nil {
-		return err
-	}
-	return nil
+	raw, err := exec.Command("go", "build").CombinedOutput()
+	fmt.Println(string(raw))
+	return err
 }
 
 func listDepsOfCurrentPackage2() ([]string, error) {

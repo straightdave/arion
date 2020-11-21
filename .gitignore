@@ -1,5 +1,7 @@
 arion
 temp-*
 postgal-*
+arion_*
+arion-*
 
 .idea/

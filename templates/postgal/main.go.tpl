@@ -30,7 +30,7 @@ import (
 
 	gozip "github.com/straightdave/gozip/lib"
 	"github.com/straightdave/lesphina/v2"
-	trunks "github.com/straightdave/trunks/lib"
+	trunks "github.com/straightdave/trunks-lib"
 )
 
 var (
